@@ -1,4 +1,4 @@
-# 树懒快递助手 ParcelHub
+# 树懒快递聚合助手
 
 树懒快递助手（Android，MVP V0.1）。项目名：快递聚合助手 / ParcelHub。
 
