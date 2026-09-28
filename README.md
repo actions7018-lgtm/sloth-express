@@ -32,7 +32,7 @@ MPL-2.0 是文件级 Copyleft 许可证。独立新增且未包含本项目受�
 
 | 项 | 值 |
 | --- | --- |
-| Project | 快递聚合助手（ParcelHub） |
+| Project | 树懒快递聚合助手 |
 | App 显示名 | 树懒快递助手 |
 | Copyright | © 2026 actionsk |
 | License | MPL-2.0 |
