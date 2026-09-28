@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 包裹图标：仅在「有取件码的取件任务」上显示 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/widget_icon"
+        android:pathData="M12,2 L21,6.6 L21,17.4 L12,22 L3,17.4 L3,6.6 Z" />
+    <path
+        android:pathData="M3,6.6 L12,11.2 L21,6.6 M12,11.2 L12,22"
+        android:strokeColor="#FFFFFF"
+        android:strokeAlpha="0.85"
+        android:strokeWidth="1.2" />
+</vector>

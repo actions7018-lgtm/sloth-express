@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  真机实测（HONOR HLK-AL00 / EMUI 13 / sdk 29）踩过的两个坑，改这份配置前先读：
+   1) accessibilityFlags 里的 flagReportViewIds **不能丢**：它对应
+      AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS，缺了它 API 24+ 上
+      getViewIdResourceName() 恒为 null，而 CainiaoNodeMatcher 的
+      pickInput/pickSearchEntry 第一道判定全是比 resource-id，结果是
+      “扫描一直在跑、永远匹配不上”，5s 后 FAILED(timeout)，且不打任何日志
+      （当初为了定位“服务进不了系统列表”临时改成最小配置，加回属性时漏了这一项）。
+      注意：它是 accessibilityFlags 的枚举值，**不是独立属性**——写成
+      android:flagReportViewIds="true" 会直接链接失败。
+   2) intent-filter 的 action 必须是 android.accessibilityservice.AccessibilityService
+      （见 AndroidManifest.xml），写错会导致服务不进系统列表。
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityFlags="flagDefault|flagReportViewIds"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/cainiao_accessibility_desc"
+    android:notificationTimeout="100" />

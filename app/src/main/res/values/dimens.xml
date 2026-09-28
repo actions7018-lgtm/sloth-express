@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Widget 尺寸常量。改这里必须同步 TodoWidgetCapacity 的「版面账」，
+  否则一屏条数会算多（第 6 条被裁到屏外）或算少（下面空一片）—— 真机踩过。
+
+  单条待办上下内边距 = 用户要的「取件码上下行间距 +5px」：
+  0.83dp + 1dp 在 3x 真机上取整成 2px + 3px = **5px**，
+  单条行高 = 方框 24dp + 这两段 = 72 + 5 = 77px（25.67dp）。
+  分成两个值而不是一个 0.83dp×2，是因为要凑出**奇数** 5px（dp 最小粒度 3px）。
+-->
+<resources>
+    <dimen name="widget_item_pad_top">0.83dp</dimen>
+    <dimen name="widget_item_pad_bottom">1dp</dimen>
+</resources>

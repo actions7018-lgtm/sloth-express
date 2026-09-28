@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#1F6FEB"
+        android:pathData="M0,0h108v108h-108z" />
+    <!-- 纸箱主体 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M26,38 L54,26 L82,38 L82,74 L54,86 L26,74 Z" />
+    <!-- 箱盖分割线 -->
+    <path
+        android:fillColor="#1F6FEB"
+        android:pathData="M26,38 L54,50 L82,38 L54,26 Z"
+        android:fillAlpha="0.25" />
+    <!-- 中缝胶带 -->
+    <path
+        android:strokeColor="#1F6FEB"
+        android:strokeWidth="4"
+        android:pathData="M54,50 L54,86" />
+    <!-- 运单标签 -->
+    <path
+        android:fillColor="#FFC84A"
+        android:pathData="M60,58 L76,64 L76,74 L60,68 Z" />
+</vector>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">树懒快递助手</string>
+    <string name="notification_listener_label">树懒快递助手 · 通知采集</string>
+    <string name="cainiao_accessibility_label">树懒快递助手 · 自动填单号</string>
+    <string name="cainiao_accessibility_desc">在菜鸟 App 的查快递页面自动填入已识别的快递单号，省去手动复制粘贴。只在你发起查询时工作，只操作菜鸟的单号输入框，不读取其他应用内容，也不会替你点击“查询”。</string>
+
+    <!-- 桌面小组件：快递待办 -->
+    <string name="widget_todo_label">快递待办</string>
+    <string name="widget_todo_desc">桌面上显示需要你处理的快递：待取件与待查询，点左边的方框即可标记已取件。</string>
+    <string name="widget_todo_empty">暂无待取快递</string>
+    <string name="widget_todo_open_app">打开树懒快递助手</string>
+    <string name="widget_todo_empty_hint">暂无待取快递</string>
+    <string name="widget_todo_check_desc">标记已取件</string>
+    <string name="widget_todo_count">%1$d 项待办</string>
+    <string name="widget_todo_more">%1$d 项没显示 · 点此翻页 ›</string>
+    <string name="widget_todo_more_last">最后一页 · 点此回第一页 ›</string>
+    <string name="widget_todo_tracking">单号 %1$s</string>
+    <string name="widget_todo_pick_failed">标记失败，请重试</string>
+</resources>

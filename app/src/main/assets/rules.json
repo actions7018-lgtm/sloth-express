@@ -1,0 +1,90 @@
+{
+  "version": 2,
+  "gateKeywords": [
+    "快递", "包裹", "物流", "运单", "单号", "取件", "取货", "驿站",
+    "代收", "丰巢", "菜鸟", "派送", "发货", "签收", "到站", "入柜", "柜"
+  ],
+  "sources": [
+    { "packageName": "com.taobao.taobao", "appName": "淘宝", "sourceType": "ECOMMERCE", "keywords": ["快递", "包裹", "物流", "发货", "取件", "驿站", "运单"], "priority": 90, "enabled": true },
+    { "packageName": "com.tmall.android", "appName": "天猫", "sourceType": "ECOMMERCE", "keywords": ["快递", "包裹", "物流", "发货", "取件"], "priority": 80, "enabled": true },
+    { "packageName": "com.jingdong.app.mall", "appName": "京东", "sourceType": "ECOMMERCE", "keywords": ["快递", "包裹", "物流", "发货", "取件", "驿站", "运单"], "priority": 90, "enabled": true },
+    { "packageName": "com.xunmeng.pinduoduo", "appName": "拼多多", "sourceType": "ECOMMERCE", "keywords": ["快递", "包裹", "物流", "发货", "取件", "驿站"], "priority": 90, "enabled": true },
+    { "packageName": "com.ss.android.ugc.aweme", "appName": "抖音", "sourceType": "ECOMMERCE", "keywords": ["快递", "包裹", "物流", "发货", "取件"], "priority": 70, "enabled": true },
+    { "packageName": "com.ss.android.ugc.aweme.lite", "appName": "抖音极速版", "sourceType": "ECOMMERCE", "keywords": ["快递", "包裹", "物流", "发货"], "priority": 60, "enabled": true },
+    { "packageName": "com.cainiao.wireless", "appName": "菜鸟", "sourceType": "PICKUP_STATION", "keywords": ["取件", "驿站", "包裹", "快递", "到站", "取件码"], "priority": 95, "enabled": true },
+    { "packageName": "com.fcbox.bxlm", "appName": "丰巢", "sourceType": "LOCKER", "keywords": ["取件", "柜", "快递", "取件码", "包裹"], "priority": 95, "enabled": true },
+    { "packageName": "com.sf.activity", "appName": "顺丰速运", "sourceType": "LOGISTICS", "keywords": ["快递", "运单", "物流", "派送", "签收", "取件"], "priority": 90, "enabled": true },
+    { "packageName": "com.zto.zto", "appName": "中通快递", "sourceType": "LOGISTICS", "keywords": ["快递", "运单", "物流", "派送", "签收"], "priority": 85, "enabled": true },
+    { "packageName": "com.yto.express", "appName": "圆通速递", "sourceType": "LOGISTICS", "keywords": ["快递", "运单", "物流", "派送", "签收"], "priority": 85, "enabled": true },
+    { "packageName": "com.yunda.android", "appName": "韵达速递", "sourceType": "LOGISTICS", "keywords": ["快递", "运单", "物流", "派送", "签收"], "priority": 85, "enabled": true },
+    { "packageName": "com.sto.android", "appName": "申通快递", "sourceType": "LOGISTICS", "keywords": ["快递", "运单", "物流", "派送", "签收"], "priority": 85, "enabled": true },
+    { "packageName": "com.jtexpress.android", "appName": "极兔速递", "sourceType": "LOGISTICS", "keywords": ["快递", "运单", "物流", "派送", "签收"], "priority": 85, "enabled": true },
+    { "packageName": "com.chinaPost.activity", "appName": "中国邮政", "sourceType": "LOGISTICS", "keywords": ["快递", "邮件", "运单", "物流", "签收"], "priority": 85, "enabled": true },
+    { "packageName": "com.eg.android.AlipayGphone", "appName": "支付宝", "sourceType": "ECOMMERCE", "keywords": ["取件码", "驿站", "快递到了", "包裹已到"], "priority": 50, "enabled": true },
+    { "packageName": "com.tencent.mm", "appName": "微信", "sourceType": "OTHER", "keywords": ["取件码", "驿站通知", "快递到了", "取货码"], "priority": 40, "enabled": false },
+    { "packageName": "com.parcelhub.sms", "appName": "短信", "sourceType": "OTHER", "keywords": ["快递", "快件", "物流", "包裹", "运单", "单号", "派送", "签收", "驿站", "取件", "取件码", "配送", "送达", "到站", "入柜", "丰巢"], "priority": 99, "enabled": true }
+  ],
+  "carriers": [
+    { "code": "SF", "name": "顺丰速运", "aliases": ["顺丰", "顺丰速运", "顺丰收派"], "trackingPatterns": ["\\bSF\\d{12,15}\\b", "\\b[1-9]\\d{14}\\b"] },
+    { "code": "JD", "name": "京东物流", "aliases": ["京东", "京东快递", "京东物流"], "trackingPatterns": ["\\bJD[A-Za-z0-9]{8,20}\\b", "\\b[0-9A-Za-z]{10,15}\\b"] },
+    { "code": "ZTO", "name": "中通快递", "aliases": ["中通", "中通快递"], "trackingPatterns": ["\\b[67]\\d{11,12}\\b"] },
+    { "code": "YTO", "name": "圆通速递", "aliases": ["圆通", "圆通速递"], "trackingPatterns": ["\\bYT\\d{10,13}\\b", "\\b[16]\\d{12}\\b"] },
+    { "code": "YD", "name": "韵达速递", "aliases": ["韵达", "韵达速递"], "trackingPatterns": ["\\b[34]\\d{12}\\b"] },
+    { "code": "STO", "name": "申通快递", "aliases": ["申通", "申通快递"], "trackingPatterns": ["\\b[78]\\d{11,13}\\b"] },
+    { "code": "JT", "name": "极兔速递", "aliases": ["极兔", "极兔速递", "J&T"], "trackingPatterns": ["\\b9\\d{12,14}\\b"] },
+    { "code": "EMS", "name": "EMS", "aliases": ["EMS", "中国邮政", "邮政快递", "邮政"], "trackingPatterns": ["\\b[A-Z]{2}\\d{9}[A-Z]{2}\\b", "\\b[12]\\d{12}\\b"] },
+    { "code": "ANE", "name": "安能物流", "aliases": ["安能", "安能物流"], "trackingPatterns": ["\\b\\d{12}\\b"] },
+    { "code": "BEST", "name": "百世快递", "aliases": ["百世", "百世快递", "百世快运"], "trackingPatterns": ["\\b\\d{12,15}\\b"] }
+  ],
+  "labeledTrackingPattern": "(?:运单号|快递单号|物流单号|包裹单号|单号)\\s*[：:为是]?\\s*([A-Za-z0-9][A-Za-z0-9\\-]{7,23})",
+  "statusRules": [
+    { "eventType": "RETURNED", "status": "RETURNED", "priority": 100, "keywords": ["包裹退回", "快件退回", "退回中", "拒收后退回", "退件", "已退回"] },
+    { "eventType": "CANCELLED", "status": "CANCELLED", "priority": 100, "keywords": ["订单已取消", "包裹已取消", "运单已取消"] },
+    { "eventType": "DELIVERED", "status": "DELIVERED", "priority": 95, "keywords": ["已签收", "签收成功", "本人已收", "已收货", "已送达本人", "已放在家门口", "已放到家门口", "已送至家门口", "已投递至家门口", "已(?:放在|放到|投递至|送至|送到)\\s*(?:家)?门口"] },
+    { "eventType": "PICKUP_CODE_AVAILABLE", "status": "PICKUP_READY", "priority": 90, "keywords": ["取件码已更新", "请凭码取件", "凭取件码", "取件码已发送", "请凭取件码"] },
+    { "eventType": "LOCKER_STORED", "status": "PICKUP_READY", "priority": 88, "keywords": ["已入柜", "已放入柜", "已存入柜", "已投柜", "已入丰巢", "放入丰巢柜", "已存入丰巢", "请到柜机取件"] },
+    { "eventType": "ARRIVED", "status": "ARRIVED", "priority": 85, "keywords": ["已到驿站", "到达驿站", "已到代收点", "包裹已到站", "已到站", "包裹已到达", "已到达驿站", "驿站已收到", "已到店"] },
+    { "eventType": "OUT_FOR_DELIVERY", "status": "OUT_FOR_DELIVERY", "priority": 80, "keywords": ["派送中", "派件中", "正在派送", "安排派送", "快递员正在为您派送", "已到达派送"] },
+    { "eventType": "IN_TRANSIT", "status": "IN_TRANSIT", "priority": 70, "keywords": ["运输中", "已发往", "已到达", "派送至下一站", "中转", "干线运输", "已到.*分拨", "离开", "到达.*中心", "物流更新"] },
+    { "eventType": "SHIPPED", "status": "SHIPPED", "priority": 60, "keywords": ["已发货", "卖家已发货", "已揽收", "揽收成功", "已揽件", "包裹已发出", "已发出", "商家已发货"] }
+  ],
+  "pickup": {
+    "positiveKeywords": ["取件码", "取货码", "取件号", "取件密码", "提货码", "取货密码", "取件凭证", "凭码", "取件"],
+    "contextPatterns": [
+      "(?:取件码|取货码|取件号|取件密码|提货码|取货密码|取件凭证)\\s*[是为:：=号]?\\s*[：:]?\\s*([A-Za-z0-9][A-Za-z0-9\\-]{1,15})"
+    ],
+    "negativeKeywords": ["验证码", "校验码", "短信验证", "语音验证", "支付密码", "付款码", "动态密码"],
+    "negativeContexts": ["尾号", "剩余", "已超", "超过", "时长", "小时", "分钟", "订单", "金额", "运费", "优惠", "元", "￥", "¥", "满减", "积分"],
+    "segmentedPattern": "\\b\\d{1,3}-\\d{1,3}-\\d{1,4}\\b",
+    "alnumPattern": "\\b[A-Za-z]{1,3}\\d{4,10}\\b",
+    "pureDigits": "\\b\\d{4,8}\\b",
+    "tokenPattern": "[A-Za-z0-9][A-Za-z0-9\\-]{2,15}",
+    "excludePatterns": [
+      "\\b1[3-9]\\d{9}\\b",
+      "\\b\\d{1,2}[:：]\\d{2}\\b",
+      "\\b\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}\\b",
+      "\\b\\d{11,}\\b",
+      "\\b\\d{9,10}\\b",
+      "\\b\\d{1,3}(?:\\.\\d{1,2})?\\s*元\\b",
+      "\\b\\d{1,3}\\s*[￥¥]\\b"
+    ],
+    "lockerPatterns": [
+      "(?:柜号|柜子|格口|箱号|格子)\\s*[是为:：]?\\s*([A-Za-z0-9\\-]{1,8})",
+      "(\\d{1,3})\\s*号柜"
+    ]
+  },
+  "locations": {
+    "patterns": [
+      "([\\u4e00-\\u9fa5A-Za-z0-9]{2,14})(驿站|快递柜|自提柜|代收点|快递超市|服务站)",
+      "(?:已到|到达|抵达|至)\\s*[：:]?\\s*([\\u4e00-\\u9fa5A-Za-z0-9]{2,16}?)(?:\\s|，|,|。|$|取|凭|领取|请)"
+    ],
+    "destinationPatterns": [
+      "(?:收货地址|送货地址|派送至|送达地址|收件地址)\\s*[：:]?\\s*([^，,。;；\\n]{2,40})"
+    ],
+    "placePatterns": [
+      "(?:已放到|已放在|已放于|已投递至|已送至|已送货至|送货上门(?:至)?|放到|放在|放于|投递至|送至)\\s*[：:]?\\s*(家门口|门口|门前|前台|门卫室|门卫|传达室|物业|驿站门口|店里|店内|办公桌)",
+      "([\\u4e00-\\u9fa5]{1,10}(?:区|街道|镇|路|大道|街|巷|弄|小区|花园|新村)[\\u4e00-\\u9fa5A-Za-z0-9]{0,12}(?:驿站|代收点|快递柜|自提柜|快递超市|服务站))"
+    ],
+    "blacklist": ["验证码", "快递员", "运单号", "您的", "包裹", "已到", "到达", "收到", "请到", "请凭"]
+  }
+}

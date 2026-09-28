@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget 配色（深色），与 App 深色主题保持一致 -->
+<resources>
+    <color name="widget_surface">#FF211F26</color>
+    <color name="widget_text">#FFE6E1E5</color>
+    <color name="widget_text_sub">#FFCAC4D0</color>
+    <color name="widget_check">#FF938F99</color>
+    <color name="widget_check_done">#FF81C995</color>
+    <color name="widget_icon">#FFD0BCFF</color>
+</resources>

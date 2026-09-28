@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  快递待办 Widget 根布局。
+
+  为什么不用「集合 Widget（ListView + RemoteViewsService）」：
+  集合 item 里**子视图的点击在这台设备（荣耀/华为桌面）上不生效**，只有 item 根视图的点击
+  才会被处理 —— 真机实测：把「点方框=完成」挂在 checkbox 上完全无反应，
+  而整行点击能正常打开详情。需求要求「点方框完成」与「点条目看详情」两个动作同时可用，
+  因此改用固定布局 + RemoteViews.addView 动态填充（子视图点击在非集合布局里是标准能力）。
+
+  容量与翻页（不是滚动）：
+  Widget 只有 191dp 高（4x2 格），一屏能放几条由**桌面实际给的高度**算出来
+  （`TodoWidgetCapacity.rowsFor`，取 getAppWidgetOptions 的 MAX_HEIGHT —— MIN_HEIGHT 是
+  可缩到的最小值，按它算会只放 1 条、下面空一大片，真机踩过）。
+  超出的条目在**标题行右上角**显示「还有 N 项 › / 最后一页 · 点此回第一页 ›」翻页查看，
+  标题点击 = 打开 App。翻页字放标题行，不占条目区高度，所以容量公式里没有为它留位。
+  为什么不做 ScrollView：RemoteViews 白名单不放它 —— 试过，`apply()` 抛
+  「Class not allowed to be inflated」，华为桌面弹「加载窗口小工具时出现问题」、整块变空（真机踩过）。
+  为什么不用 ListView 滚动：能滚，但集合 item 的子视图点击在这台设备失效，
+  「点方框完成」会一起丢（见上）。滚动与两个点击动作在这台设备上互斥 → 选了保留动作 + 翻页。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_todo_bg"
+    android:orientation="vertical"
+    android:paddingStart="14dp"
+    android:paddingTop="5dp"
+    android:paddingEnd="14dp"
+    android:paddingBottom="4dp">
+
+    <!-- 标题行：左「N 项待办」（点击=打开 App），右「还有 N 项 ›」翻页（单页时隐藏） -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:contentDescription="@string/widget_todo_open_app"
+            android:maxLines="1"
+            android:text="@string/widget_todo_empty"
+            android:textColor="@color/widget_text"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/more_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:maxLines="1"
+            android:textColor="@color/widget_text_sub"
+            android:textSize="11sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- 当前页条目容器（Provider 用 addView 动态填充）。
+         这里**不能用 ScrollView**：RemoteViews 白名单只放 Frame/Linear/Relative/Grid 四种容器 +
+         5 个集合控件（ListView/GridView/StackView/ViewFlipper/AdapterViewFlipper），
+         ScrollView 一放进去 apply() 就抛「Class not allowed to be inflated」，
+         华为桌面直接弹「加载窗口小工具时出现问题」、整个 Widget 变空（真机踩过）。
+         高度是 0dp + weight=1：吃掉标题行以外的全部空间；超出一屏的条目交给标题行右上角的翻页字。
+
+         上下留白 5/4dp + 间距 1dp 是为「单条行高 24dp→25.67dp（用户要的 +5px 行间距）」
+         腾出来的：固定开销必须从 35dp 压到 29dp，否则 184dp 的框算不出 6 条/页
+         （29 + 6×25.7 = 183.2 ≤ 184，见 TodoWidgetCapacityTest 的硬约束）。 -->
+    <LinearLayout
+        android:id="@+id/widget_page"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="1dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:id="@+id/widget_items"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </LinearLayout>
+
+    <!-- 空状态（需求：所有快递都完成时显示「暂无待取快递」，而不是空白 Widget） -->
+    <TextView
+        android:id="@+id/widget_empty"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="@string/widget_todo_empty_hint"
+        android:textColor="@color/widget_text_sub"
+        android:textSize="13sp"
+        android:visibility="gone" />
+</LinearLayout>

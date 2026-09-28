@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  快递待办 Widget 元数据（App Widget 官方架构）。
+
+  updatePeriodMillis = 0：**不做系统定时轮询**（需求第 14 条：降低耗电）。
+  刷新完全事件驱动：Room 数据变化 → ServiceLocator 里的观察者主动刷新，
+  另外由用户点击勾选时也会即时刷新。
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_todo_desc"
+    android:initialLayout="@layout/widget_todo"
+    android:minHeight="110dp"
+    android:minWidth="250dp"
+    android:previewLayout="@layout/widget_todo"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="2"
+    android:targetCellWidth="4"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

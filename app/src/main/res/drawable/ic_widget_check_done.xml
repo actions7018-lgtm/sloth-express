@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 勾选态：给用户「已完成」的短暂反馈（需求 7） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/widget_check_done"
+        android:pathData="M7,4 L17,4 A3,3 0 0 1 20,7 L20,17 A3,3 0 0 1 17,20 L7,20 A3,3 0 0 1 4,17 L4,7 A3,3 0 0 1 7,4 Z" />
+    <path
+        android:pathData="M8.4,12.1 L11,14.7 L15.8,9.6"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2" />
+</vector>

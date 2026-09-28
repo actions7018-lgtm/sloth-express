@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 仅 App 自身提醒需要；Android 13+ 运行时申请，拒绝后数据仍本地收集 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 通知使用权（用户在系统设置中手动开启） -->
+    <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" />
+    <!-- 短信自动识别（快递短信 SOP §5）：RECEIVE_SMS 只用于**监听新短信**，
+         在来源管理里由用户主动开关；不申请 SEND_SMS / WRITE_SMS（不发不改短信），
+         也不申请 READ_SMS——历史短信扫描（SOP §36/§37）本期未实现，按最小权限只申请必需项。 -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+
+    <!-- 快递灵动岛 · 悬浮模式（SOP §11.2）：**默认关闭**，只在用户于设置里主动开启后才用；
+         没有该权限时自动回退到系统通知模式（SOP §13 / §19），不影响采集与提醒。 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- 悬浮服务在 O+ 以前台服务方式短暂拉起：只在胶囊显示期间存在（约 3~4 秒），
+         胶囊消失即 stopForeground + stopSelf，不常驻、不轮询（SOP §14）。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <application
+        android:name=".App"
+        android:allowBackup="false"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.ParcelHub"
+        tools:targetApi="37">
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.ParcelHub">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 分享导入兜底入口（§16）：电商/物流 App 中分享文本到本 App -->
+        <activity
+            android:name=".ingest.ShareEntryActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.ParcelHub.Translucent">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!-- 默认采集模式：NotificationListenerService（§3.1） -->
+        <service
+            android:name=".ingest.NotificationListener"
+            android:exported="true"
+            android:label="@string/notification_listener_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- 菜鸟自动填单号：只在用户于系统设置中开启后可用（参考 SOP §6 授权 / §16 目标包名） -->
+        <!-- ⚠️ intent-filter 的 action 必须是 android.accessibilityservice.AccessibilityService，
+             不能照 NotificationListener 的格式写成 android.service.accessibility.*。
+             真机实测（2026-09-26，荣耀 HLK-AL00 / Android 10）：写成后者的后果是
+             「设置 → 无障碍 → 已安装的服务」里不出现本服务、installedServiceCount 少 1、
+             Bound services 永远为空——服务完全无法开启。
+             排查方法：`adb shell dumpsys package <本包>` 看 resolver table 把服务归到哪个
+             action 分组，与在列服务的 action 对齐即可；`dumpsys accessibility` 的
+             installedServiceCount / Bound services 可用来判定是否被系统收录并绑定。
+             exported 保留 true（系统跨进程 bindService 的常规写法；实测同设备 exported=false
+             的第三方服务也能在列，故它不是收录条件）。 -->
+        <service
+            android:name=".autoquery.cainiao.CainiaoAccessibilityService"
+            android:label="@string/cainiao_accessibility_label"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/cainiao_accessibility" />
+        </service>
+
+        <!-- 桌面「快递待办」Widget（Android 官方 App Widget 架构）
+             只读本 App 的 Room 数据库，写操作只改用户状态，不碰菜鸟、不做自动化。
+             自定义 ACTION_PICK_UP 用于「在 Widget 上手动完成」，由 Provider 自己消费。 -->
+        <receiver
+            android:name=".widget.TodoWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_todo_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <!-- 条目点击（打开详情 / 标记已取件），由 fill-in intent 的 op 区分 -->
+                <action android:name="com.parcelhub.widget.ITEM_CLICK" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/todo_widget_info" />
+        </receiver>
+
+        <!-- 打开菜鸟的中转 Activity（§14）：由用户点通知按钮触发，不从后台拉起 -->
+        <activity
+            android:name=".autoquery.cainiao.CainiaoOpenActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.ParcelHub.Translucent" />
+
+        <!-- 快递灵动岛 · 悬浮模式（SOP §12 IslandOverlayService）。
+             exported=false：只有本 App 自己能启动。
+             specialUse 前台服务类型（API 34+ 必须显式声明）：胶囊是用户主动开启的
+             「显示在其他应用上层」提醒，不属于通讯/媒体等任何标准前台服务类型。
+             真机实测（2026-09-27，荣耀 HLK-AL00 / Android 10）：O+ 从后台被拉起时
+             必须在 5 秒内 startForeground，否则系统判定 ForegroundServiceDidNotStartInTime；
+             因此服务收到 SHOW 后先 startForeground（低优先级静默通知），胶囊消失一并移除。 -->
+        <service
+            android:name=".island.IslandOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="user-enabled floating capsule for parcel status events" />
+        </service>
+        <!-- 短信自动识别 · 实时接收（快递短信 SOP §7/§8）。
+             SMS_RECEIVED 是受保护广播：只有系统进程能发（真机实测 adb shell 直接被 AMS
+             `Permission Denial` 拒绝），所以这里不必再挂签名级权限；
+             读不读短信由来源管理里那个开关决定（默认开），关掉后 Receiver 直接丢弃。 -->
+        <receiver
+            android:name=".sms.SmsReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 短信 · 调试注入入口（SOP §44 集成测试）。
+             真机既发不出受保护广播、又可能没有可收信的 SIM，故留一条等价通道：
+             adb 喂一条短信进去，走与 SmsReceiver 完全相同的 过滤 → 去重 → 入队 → 解析 → 落库。
+             两道护栏：permission=DUMP 只授予 adb shell 这类系统调用方（三方应用拿不到），
+             且代码里要求 BuildConfig.DEBUG，release 收到也不执行。 -->
+        <receiver
+            android:name=".sms.SmsDebugReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.parcelhub.DEBUG_SMS" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

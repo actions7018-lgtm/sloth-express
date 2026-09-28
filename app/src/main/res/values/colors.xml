@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget 配色（浅色）。深色覆盖见 values-night/colors.xml -->
+<resources>
+    <color name="widget_surface">#FFFFFFFF</color>
+    <color name="widget_text">#FF1C1B1F</color>
+    <color name="widget_text_sub">#FF79747E</color>
+    <color name="widget_check">#FF79747E</color>
+    <color name="widget_check_done">#FF2E7D32</color>
+    <color name="widget_icon">#FF6750A4</color>
+</resources>

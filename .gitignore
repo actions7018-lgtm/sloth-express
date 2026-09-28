@@ -1,0 +1,19 @@
+*.iml
+.gradle/
+.idea/
+.kotlin/
+build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# 临时产物（量图 / 注入脚本 / 抓库快照，冒烟脚本会自动清理 tools\_*）
+tools/_*
+*.db
+*.db-shm
+*.db-wal
+.DS_Store
+Thumbs.db

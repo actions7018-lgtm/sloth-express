@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Widget 单条待办。
+
+  文案形如：☐ 📦 取件码 99-9-7515｜菜鸟驿站
+            ☐     待查询｜菜鸟驿站
+  第二行是「必要时」才显示的快递单号。
+-->
+<!-- clipChildren=false 是「整条淡出时，下面的条目提前上滑」的必要条件：
+     上滑不是位移动画（RemoteViews 反射白名单不放 setTranslationY），而是给**紧邻的下一行**
+     设一个负的上内边距（RemoteViews.setViewPadding 是专用 action，不走反射 → 白名单放行）：
+     那一行会变矮、内容顶到自己上边界之外，必须不裁剪才能画出来（真机踩过：
+     反射用 setScaleX/setAlpha 会让华为桌面弹「加载窗口小工具时出现问题」、整块组件变空）。
+     行内容高 = 方框 24dp，加上下内边距（dimens.xml，合计 +5px）= 77px，
+     行高变了必须同步 TodoWidgetCapacity.ROW_H_DP，否则一屏会算多一条。 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/item_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingTop="@dimen/widget_item_pad_top"
+    android:paddingBottom="@dimen/widget_item_pad_bottom">
+
+    <!-- 空心 Checkbox：点击 = 手动标记已取件（需求 10）。
+         26×24dp 命中区域（图标 18dp，靠 padding 撑开），内容行高就被它定死在 **24dp**
+         （+ 根视图上下内边距 5px = 25.67dp，见 dimens.xml）：
+         一屏能放几条 = (高度 - 29) / 25.7，方框随便加大都会让一页从 6 条掉到 5 条（真机踩过）。
+         方框 36→24dp 是用户按「行间距还是太宽，一页放 6 个」压的，别随手加回去。
+         这里的 `padding="3dp"` 还兼任「打勾 pop」的动画手柄：进入段用
+         RemoteViews.setViewPadding 把它改成 5.5dp→3dp（回弹），图标看着就是弹出来的。
+         点击由 Provider 的 fill-in 模板处理（集合 Widget 不能给子视图单独设 PendingIntent）。 -->
+    <ImageView
+        android:id="@+id/item_check"
+        android:layout_width="26dp"
+        android:layout_height="24dp"
+        android:layout_marginEnd="4dp"
+        android:contentDescription="@string/widget_todo_check_desc"
+        android:padding="3dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_widget_check_empty" />
+
+    <!-- 快递图标：仅有取件任务（有取件码）时显示（需求） -->
+    <ImageView
+        android:id="@+id/item_icon"
+        android:layout_width="15dp"
+        android:layout_height="15dp"
+        android:layout_marginEnd="5dp"
+        android:src="@drawable/ic_widget_parcel"
+        android:visibility="gone" />
+
+    <!-- 主文案 + 右侧单号（**同一行**）：
+         单号原来在第二行，会把行高顶到 34dp、一页就装不下 6 条（真机踩过），
+         改成右侧小字后所有条目都是 24dp 单行，容量公式才成立。 -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/item_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/widget_text"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/item_sub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/widget_text_sub"
+            android:textSize="11sp"
+            android:visibility="gone" />
+    </LinearLayout>
+</LinearLayout>
