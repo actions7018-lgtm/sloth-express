@@ -7,4 +7,6 @@
     <color name="widget_check">#FF79747E</color>
     <color name="widget_check_done">#FF2E7D32</color>
     <color name="widget_icon">#FF6750A4</color>
+    <!-- 桌面启动图标（自适应）背景层：logo_sat_lightblue.svg 底色 -->
+    <color name="ic_launcher_background">#FFD6E9F7</color>
 </resources>
