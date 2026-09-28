@@ -1,7 +1,12 @@
-快递聚合助手
+ParcelHub（树懒快递助手 / 快递聚合助手）
 Copyright © 2026 actionsk
 
-This product may include software developed by third parties.
+SPDX-License-Identifier: MPL-2.0
 
+This project is licensed under the Mozilla Public License, v. 2.0.
+See also: LICENSE, README.md (License section), CONTRIBUTING.md,
+THIRD-PARTY-NOTICES.md.
+
+This product may include software developed by third parties.
 Third-party components are subject to their respective licenses.
 Their copyright notices and license terms remain applicable.
