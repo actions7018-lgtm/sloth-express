@@ -22,6 +22,8 @@
 
 | 改动 | 文件 | 说明 |
 | --- | --- | --- |
+| **桌面启动图标换成树懒 logo（自适应）** | `AndroidManifest.xml`、`res/mipmap-{mdpi..xxxhdpi}/ic_launcher*.png`、`res/mipmap-anydpi-v26/ic_launcher.xml`、`res/values/colors.xml` | 用户提供的 `logo_sat_lightblue.svg`（1024×1024）经 headless Edge 渲染 1024 PNG，再 Pillow 出图：Android 8.0+ 走**自适应图标**（背景色 `#D6E9F7`，前景树懒图形按内容 bbox 放入 108dp 画布的 66dp 安全区、透明底），API 24/25 回退 `mipmap-*/ic_launcher.png` 传统方形；`android:icon` 由 `@drawable/ic_launcher` 改 `@mipmap/ic_launcher`。**通知 smallIcon 仍用 `drawable/ic_launcher.xml` 不动**（`AppNotificationManager`/`IslandNotificationManager` 共 8 处引用）。真机 HONOR 桌面实测：浅蓝圆角图标 + 树懒坐纸飞机 + 「树懒快递助手」label 正常 |
+| **Release 签名配置（产出已签名 APK）** | `app/build.gradle.kts`、`keystore.properties`（新建）、`keystore/sloth-express-release.jks`（新建）、`.gitignore` | `signingConfigs.release` 读根目录 `keystore.properties`（RSA 2048、有效期 10000 天、`CN=actionsk, OU=ParcelHub`）；密钥与口令**不入库**（`.gitignore` 新增 `keystore.properties`/`*.jks`/`*.keystore`）；`assembleRelease` 首次跑 `lintVitalAnalyzeRelease` 要联网下 lint 工具，直连超时 → 临时加 `gradle.properties` 的 `systemProp.*.proxy*` 走本机代理，构建后已还原（**不提交**代理配置） |
 | 短信权限口径 | `util/PermissionUtil.kt` | 类注释「V0.1 默认不申请短信」已失真 → 改为：`RECEIVE_SMS` 属于来源管理「短信」行的开关依赖，检查/申请/跳设置都在 `sms/SmsPermissionManager`；`SEND_SMS`/`WRITE_SMS`/`READ_SMS` 与定位、相机、麦克风、通讯录仍一律不申请 |
 | 冒烟第 9 步滚动加固 | `tools/device-smoke.ps1` | `Has-Text-Scrolled` 默认 3 → 5 次上滑，循环改 `i -le tries`（最后一屏滑完**必须再查一次**，原实现最后一次滑动结果永不检查）；来源管理 19 行 ≈ 5.3 屏，旧实现够不到排在后面的菜鸟/顺丰 → 上一轮 2 条假 FAIL |
 | 冒烟 8b「打开权限引导页」入口改双向查找 | `tools/device-smoke.ps1` | 原来在 `Go-Tab` 后固定上滑两次再点「重新运行权限引导」，入口在设置页里的位置会随分区增减漂移 → 2026-09-28 实测 `FAIL=设置页入口未找到`。改为**先往顶（上滑）再往底（下滑）各最多 5 次**，每次滑完重新 `uiautomator dump` 再查（同 `Has-Text-Scrolled` 的假失败加固）；复跑 **PASS=86 / FAIL=0 / exit=0** |
@@ -37,6 +39,7 @@
 
 | 改动 | 文件 | 说明 |
 | --- | --- | --- |
+| Release 打包 + 单测复跑 | `app/build/outputs/apk/release/app-release.apk` | `:app:testDebugUnitTest` **277 tests / 29 classes / 0 failed**；`assembleRelease` BUILD SUCCESSFUL，`app-release.apk` 13,405,015 B，`apksigner verify --print-certs` **exit=0**、Signer `CN=actionsk, OU=ParcelHub, O=actionsk` |
 | 短信单测 16 条 | `test/.../sms/SmsDetectionTest.kt`（8）、`sms/SmsIngestorTest.kt`（8） | §43 六条必测语料全绿（正常派送带单号+承运商 / 驿站带取件码 / 家门口 `DELIVERED` + `destination=家门口` / 验证码排除 / 银行排除 / 只有手机号不识别），另含白名单注册、发件人指纹不可逆；入队器覆盖 关开关不入队、入队字段正确、同信封只入一次、时间戳不同算新信封、排除与非物流不入队、队列满不记账可重试、哈希不含原文与手机号。**277 测试 / 29 类 / 0 失败** |
 | 真机验收（HONOR HLK-AL00 / Android 10） | — | ① 来源管理「短信」行默认开，按 `ORDER BY app_name` 落在 申通 ↔ 菜鸟 之间（中通仍第一，不破冒烟断言）；② 点副标题 / 开开关 → `RECEIVE_SMS` 系统弹窗，允许后副标题切「读到的物流短信只在本机解析，短信原文不保存」；③ `pm revoke` + 冷启动 → 开关仍开（持久化）、副标题回到授权提示；④ 注入 → `sms ingest: enabled=true enqueued=1` → DB `shipments.source_platform = com.parcelhub.sms`、`parcel_events.source_package = com.parcelhub.sms`、`confidence=0.99`，列表出现「顺丰速运 / 已到站 / 取件码 8-8-8888 / 单号 SF7788990011223」，Widget 2→3 项，灵动岛 `COMPACT→EXPANDED→COMPACT`，自动查询 `[DECISION] … NOT_REQUIRED`；⑤ 关开关后注入 → `enabled=false enqueued=0 reason=disabled`，不入库；⑥ 同信封重发（同 `--el timestamp`）→ `enqueued=0 reason=duplicate` |
 | 冒烟 | `tools/device-smoke.ps1` | **PASS=86 / FAIL=0**（84 → 86：新增「来源管理：短信」「来源管理：短信开关默认开」），上一轮菜鸟/顺丰两条假失败随滚动加固消失；8b 入口双向查找修复后 + OPPO 黑胶囊 APK 各复跑一次，均 **86 / 0 / exit=0** |

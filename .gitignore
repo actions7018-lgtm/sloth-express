@@ -4,6 +4,10 @@
 .kotlin/
 build/
 local.properties
+# Release 签名（本地密钥，不入库）
+keystore.properties
+*.jks
+*.keystore
 captures/
 .externalNativeBuild/
 .cxx/
@@ -17,3 +21,4 @@ tools/_*
 *.db-wal
 .DS_Store
 Thumbs.db
+back/
