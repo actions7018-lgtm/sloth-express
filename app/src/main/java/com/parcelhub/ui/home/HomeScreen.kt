@@ -48,13 +48,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.parcelhub.App
+import com.parcelhub.data.entity.PendingShipmentEntity
 import com.parcelhub.data.entity.ShipmentEntity
 import com.parcelhub.data.entity.isActiveInTransit
 import com.parcelhub.data.entity.isActiveOutForDelivery
+import com.parcelhub.data.entity.isWaiting
 import com.parcelhub.data.entity.needsPickup
 import com.parcelhub.data.entity.statusEnum
 import com.parcelhub.data.entity.userStatusEnum
 import com.parcelhub.model.UserStatus
+import com.parcelhub.pending.pendingSourceLabel
 import com.parcelhub.ui.components.SectionHeader
 import com.parcelhub.ui.components.StatusChip
 import com.parcelhub.ui.components.copyToClipboard
@@ -75,6 +78,7 @@ fun HomeScreen(
     onOpenSources: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenDetail: (Long) -> Unit,
+    onOpenPending: (Long) -> Unit,
 ) {
     val context = LocalContext.current
     val repository = App.graph.repository
@@ -82,6 +86,16 @@ fun HomeScreen(
 
     val shipments by remember(repository) {
         repository.observeRecent(HOME_LIMIT)
+    }.collectAsState(initial = emptyList())
+
+    // 待补全（SOP §21/§22）：「已发货但没有单号」的订单，首页单独成区
+    val pendingWaiting by remember(repository) {
+        repository.observePending()
+    }.collectAsState(initial = emptyList())
+
+    // 来源名（展示待补全的平台名用；只读包名→应用名，不读取任何页面内容）
+    val sources by remember(repository) {
+        repository.observeSources()
     }.collectAsState(initial = emptyList())
 
     var listenerEnabled by remember { mutableStateOf(false) }
@@ -101,7 +115,15 @@ fun HomeScreen(
     val pickupReady = shipments.filter { it.needsPickup }
     // 派送中 / 运输中都要排除「已取件」：标记取件后包裹归入已签收，不再挂在这两组
     val outForDelivery = shipments.filter { it.isActiveOutForDelivery }
-    val inTransit = shipments.filter { it.isActiveInTransit }
+
+    // 待补全（SOP §21/§22）：仍在等单号的记录；其正式包裹改在「待补全」区展示，
+    // 不再重复挂进「运输中」（避免同一订单两处出现、且运输中显示空单号）
+    val waiting = pendingWaiting.filter { it.isWaiting }
+    val waitingShipmentIds = waiting.mapNotNull { it.shipmentId }.toSet()
+    val inTransit = shipments.filter {
+        it.isActiveInTransit && it.id !in waitingShipmentIds
+    }
+    val sourceNames = remember(sources) { sources.associate { it.packageName to it.appName } }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -210,6 +232,26 @@ fun HomeScreen(
             }
         }
 
+        // ---------- 待补全（SOP §21/§22：已发货无单号，不丢弃） ----------
+        if (waiting.isNotEmpty()) {
+            item { SectionHeader("待补全", waiting.size) }
+            items(waiting, key = { "pending-${it.id}" }) { pending ->
+                // 来源显示（需求 §十一）：来源 App 名 → 来源管理里的应用名 → 类型兜底 → 未知，
+                // 字段永远展示，不隐藏
+                val sourceLabel = pending.sourceAppName
+                    ?: sourceNames[pending.platform]
+                    ?: pendingSourceLabel(null, pending.sourceType)
+                PendingCard(
+                    pending = pending,
+                    now = now,
+                    title = pending.productTitle ?: sourceNames[pending.platform]
+                        ?.takeIf { it.isNotBlank() } ?: "购物 App",
+                    sourceLabel = sourceLabel,
+                    onClick = { onOpenPending(pending.id) },
+                )
+            }
+        }
+
         // ---------- 快捷入口 ----------
         item {
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -234,6 +276,65 @@ private fun StatCell(title: String, count: Int, modifier: Modifier = Modifier) {
             fontWeight = FontWeight.Bold,
         )
         Text(text = title, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/**
+ * 待补全卡片（SOP §22 + 需求 §四）：商家已发货但还没有单号。
+ *
+ * 整卡可点击 → 待补全详情（需求 §五 PendingShipmentDetail）；
+ * 只展示商品名 / 平台名 / 来源 / 时间等结构化信息，不展示通知原文（SOP §42 隐私原则）。
+ */
+@Composable
+private fun PendingCard(
+    pending: PendingShipmentEntity,
+    now: Long,
+    title: String,
+    sourceLabel: String,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                text = "📦 $title",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "商家已发货 · 正在等待物流单号",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.height(2.dp))
+            val remainHours = ((pending.expireAt - now) / TimeUtil.HOUR).coerceAtLeast(0L)
+            Text(
+                text = "发货于 ${TimeUtil.relative(now, pending.shippedAt)}" +
+                    " · 还有 $remainHours 小时结束补全",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(6.dp))
+            // 来源行（需求 §四/§十一）：「来源：拼多多 >」，整卡点击都进详情
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "来源：$sourceLabel",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "打开待补全详情",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

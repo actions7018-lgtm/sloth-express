@@ -235,6 +235,86 @@ class ParserEngineTest {
         }
     }
 
+    // ---------- SOP V2.0 §29/§30 紧凑文本兜底 + §7/§8 列表批量多单号 ----------
+
+    @Test
+    fun split_tracking_number_recovered_via_compact_text() {
+        // 无障碍节点按行拼接把单号截断成 SF123 / 4567890123：原文读不到，
+        // 压缩空白后必须能提出来（带字母候选，纯数字紧凑拼接不认）。
+        val result = engine.parse(
+            raw(
+                sourcePackage = "com.xunmeng.pinduoduo",
+                title = "拼多多",
+                text = "快递单号\nSF123\n4567890123",
+            ),
+        )
+        val event = result.event
+        assertNotNull("紧凑兜底应产出事件", event)
+        assertEquals("SF1234567890123", event?.trackingNumber)
+        assertTrue(
+            "置信度应足以建单: ${result.confidence}",
+            ShipmentMatcher.canCreateShipment(result.confidence),
+        )
+    }
+
+    @Test
+    fun multiple_trackings_yield_one_event_per_number_without_context_spread() {
+        // 一页两单：逐单成事件；订单号 / 取件码等归属不明字段不得摊派（§6.4）
+        val result = engine.parse(
+            raw(
+                sourcePackage = "com.xunmeng.pinduoduo",
+                title = "拼多多",
+                text = "订单编号：2609284852390998\n快递单号 YT0710904037400\n快递单号 SF1234567890123",
+            ),
+        )
+        val trackings = result.events.mapNotNull { it.trackingNumber }.toSet()
+        assertEquals("应当一单一条", 2, result.events.size)
+        assertTrue("缺圆通单", "YT0710904037400" in trackings)
+        assertTrue("缺顺丰单", "SF1234567890123" in trackings)
+        result.events.forEach { e ->
+            assertNull("批量事件不应摊派订单号", e.orderKey)
+            assertNull("批量事件不应摊派取件码", e.pickupCode)
+            assertNull("批量事件不应摊派地址", e.destination)
+        }
+        assertEquals("event 兼容字段应指向第一条", result.events.first(), result.event)
+    }
+
+    @Test
+    fun single_tracking_keeps_full_context_attribution() {
+        // 单号唯一：订单号 / 地址照常归属（多单路径的反向回归）
+        val result = engine.parse(
+            raw(
+                sourcePackage = "com.xunmeng.pinduoduo",
+                title = "拼多多",
+                text = "订单编号：2609284852390998\n快递单号 YT0710904037400\n收货地址：浙江省杭州市余杭区仓益绿苑56栋",
+            ),
+        )
+        val event = result.event
+        assertNotNull("单事件应产出", event)
+        assertEquals(1, result.events.size)
+        assertEquals("YT0710904037400", event?.trackingNumber)
+        assertEquals("2609284852390998", event?.orderKey)
+        assertNotNull("单号唯一时地址应归属", event?.destination)
+    }
+
+    @Test
+    fun pdd_dashed_order_number_is_extracted_as_order_key() {
+        // 真机实测：拼多多订单编号是「前缀-长号」带连字符格式
+        // （如 260928-434215381420088），旧正则 \d{10,24} 段在连字符处断开导致
+        // orderKey 恒空——详情页只剩裸「订单编号」词、入库被身份闸丢弃。
+        val result = engine.parse(
+            raw(
+                sourcePackage = "com.xunmeng.pinduoduo",
+                title = "拼多多",
+                text = "订单编号: 260928-434215381420088\n快递单号 777449133381845\n收货地址: 广东省惠州市博罗县园洲镇永昌路22号",
+            ),
+        )
+        val event = result.event
+        assertNotNull("带连字符订单页应产出事件", event)
+        assertEquals("260928-434215381420088", event?.orderKey)
+        assertEquals("777449133381845", event?.trackingNumber)
+    }
+
     companion object {
         /** 一批贴近真实的通知样本（覆盖各来源与各状态） */
         private val SAMPLES = listOf(

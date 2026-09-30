@@ -37,7 +37,12 @@ $PKG = "com.parcelhub"
 $LAUNCHER = "$PKG/.ui.MainActivity"
 $SHARE = "$PKG/.ingest.ShareEntryActivity"
 
-if (-not $Apk) { $Apk = (Resolve-Path "$PSScriptRoot\..\app\build\outputs\apk\debug\app-debug.apk").Path }
+# APK 路径：AGP 9 起输出被重命名为 ParcelHub-<version>-<buildType>.apk，按通配取
+if (-not $Apk) {
+    $apkDir = (Resolve-Path "$PSScriptRoot\..\app\build\outputs\apk\debug").Path
+    $Apk = (Get-ChildItem -Path $apkDir -Filter *.apk | Select-Object -First 1).FullName
+    if (-not $Apk) { throw "找不到 debug APK：$apkDir" }
+}
 $GlobalArgs = @()
 if ($Serial) { $GlobalArgs = @("-s", $Serial) }
 
@@ -268,6 +273,12 @@ if (-not $KeepData) {
     Pass "已清空应用数据（全新首启）"
 } else { Pass "保留应用数据（-KeepData）" }
 
+# Mock 数据自动注入抑制（MockDataSeeder，仅 Debug 生效的开关）：
+# 冒烟断言基于空库绝对计数（空态/待取（N）等），启动前关掉 Debug 自动注入；
+# 脚本末尾（写完报告后）恢复为 1。中途 throw 不会恢复——手动
+# `adb shell settings put global parcelhub_mock_seed 1` 即可。
+Sh "settings put global parcelhub_mock_seed 0" | Out-Null
+
 # 通知使用权：必须走系统 cmd 接口授权。
 # 实测（华为 EMUI）：直接 `settings put secure enabled_notification_listeners` 虽能立刻读回，
 # 但系统随后会把未走正式授权流程的组件回收，导致首页出现权限横幅、把卡片顶出屏幕。
@@ -417,7 +428,10 @@ Assert (Has-Text $doc "待取（1）") "首页联动：待取（1）" "" $doc "h
 Step "8. 设置页开关与文案一致性"
 # Go-Tab：上一步若跑偏（BACK/点 tab 落到别的页），这里先纠偏再断言
 $doc = Go-Tab "设置" "取件码提醒"
-Assert (Has-Text $doc "通知使用权") "设置页：自动采集状态" "" $doc "settings"
+# 「自动采集」已按自动检测 SOP 改造为「运行检测」：总状态 + 七模块行（可展开证据）
+Assert (Has-Text $doc "运行检测") "设置页：运行检测分区" "" $doc "settings"
+Assert (Has-Text $doc "通知监听") "设置页：运行检测模块行（通知监听）" "" $doc "settings"
+Assert (Has-Text $doc "重新检测") "设置页：重新检测按钮" "" $doc "settings"
 
 $fixed = Row-Switch $doc "到站 / 取件码提醒"
 $alwaysOn = Has-Text $doc "始终开启"
@@ -738,6 +752,8 @@ $script:Results | ForEach-Object {
 }
 $reportFile = Join-Path $Report "report.md"
 [System.IO.File]::WriteAllLines($reportFile, $lines, (New-Object System.Text.UTF8Encoding($false)))
+# 恢复 Debug 启动自动注入 Mock 数据（冒烟期间是关闭的，见第 0 步）
+Sh "settings put global parcelhub_mock_seed 1" | Out-Null
 Write-Host "`n===== 冒烟结果: PASS=$pass FAIL=$fail =====" -ForegroundColor $(if ($fail -eq 0) { "Green" } else { "Red" })
 Write-Host "报告: $reportFile"
 if ($fail -gt 0) {

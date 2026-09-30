@@ -18,6 +18,36 @@
          胶囊消失即 stopForeground + stopSelf，不常驻、不轮询（SOP §14）。 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- OCR 截图兜底（SOP V2.0 §19）：仅 API 29 设备需要 MediaProjection 前台会话；
+         API 30+ 走无障碍自带 takeScreenshot，不碰本权限。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
+    <!-- 包可见性声明（Android 11+ 强制）：只声明 rules.json 里的快递相关来源包，
+         **不申请 QUERY_ALL_PACKAGES**（最小暴露口径：只能看见这些包，看不到全部已装应用）。
+         用途：设置页「手动识别订单页」/ 详情页「去对应 App 查看」的
+         getLaunchIntentForPackage + 来源列表过滤。
+         真机踩坑（2026-09-29 OPPO Find X8 / ColorOS）：无此声明时华为宽放（照常可见），
+         ColorOS 严格强制 → 菜单显示「未检测到已安装的购物 App」，手动触发通路全废；
+         与 rules.json 的 packageName 一一对应，新增规则来源须同步此处。 -->
+    <queries>
+        <package android:name="com.taobao.taobao" />
+        <package android:name="com.tmall.android" />
+        <package android:name="com.jingdong.app.mall" />
+        <package android:name="com.xunmeng.pinduoduo" />
+        <package android:name="com.ss.android.ugc.aweme" />
+        <package android:name="com.ss.android.ugc.aweme.lite" />
+        <package android:name="com.cainiao.wireless" />
+        <package android:name="com.fcbox.bxlm" />
+        <package android:name="com.sf.activity" />
+        <package android:name="com.zto.zto" />
+        <package android:name="com.yto.express" />
+        <package android:name="com.yunda.android" />
+        <package android:name="com.sto.android" />
+        <package android:name="com.jtexpress.android" />
+        <package android:name="com.chinaPost.activity" />
+        <package android:name="com.eg.android.AlipayGphone" />
+        <package android:name="com.tencent.mm" />
+    </queries>
 
     <application
         android:name=".App"
@@ -111,6 +141,16 @@
             android:excludeFromRecents="true"
             android:theme="@style/Theme.ParcelHub.Translucent" />
 
+        <!-- OCR 截图授权（SOP V2.0 §19，仅 API 29）：设置页开「OCR 截图兜底」时
+             弹一次系统录屏确认，同意即起 ScreenCaptureService 会话；透明主题、
+             不留任务栈，用户不点开关永远不会出现。 -->
+        <activity
+            android:name=".ocr.OcrConsentActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.ParcelHub.Translucent" />
+
         <!-- 快递灵动岛 · 悬浮模式（SOP §12 IslandOverlayService）。
              exported=false：只有本 App 自己能启动。
              specialUse 前台服务类型（API 34+ 必须显式声明）：胶囊是用户主动开启的
@@ -126,6 +166,15 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="user-enabled floating capsule for parcel status events" />
         </service>
+
+        <!-- OCR 截图会话（SOP V2.0 §19/§20，仅 API 29 走到）：
+             用户授权后持有一个 MediaProjection 会话，**按需**截取单帧给本地 OCR；
+             空闲期不产生任何画面数据（不做连续录制）。
+             mediaProjection 前台服务类型（API 34+ 起系统强制）+ 静默低优先级通知。 -->
+        <service
+            android:name=".ocr.ScreenCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
         <!-- 短信自动识别 · 实时接收（快递短信 SOP §7/§8）。
              SMS_RECEIVED 是受保护广播：只有系统进程能发（真机实测 adb shell 直接被 AMS
              `Permission Denial` 拒绝），所以这里不必再挂签名级权限；
@@ -149,6 +198,20 @@
             android:permission="android.permission.DUMP">
             <intent-filter>
                 <action android:name="com.parcelhub.DEBUG_SMS" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Mock 数据注入/清空入口（MockDataSeeder §10）：与 SmsDebugReceiver 同款两道护栏——
+             permission=DUMP 只授予 adb shell 这类系统调用方，且代码里要求 BuildConfig.DEBUG，
+             release 构建收到也不执行。 -->
+        <receiver
+            android:name=".mock.MockDebugReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.parcelhub.DEBUG_MOCK_SEED" />
+                <action android:name="com.parcelhub.DEBUG_MOCK_CLEAR" />
+                <action android:name="com.parcelhub.DEBUG_MOCK_RESEED" />
             </intent-filter>
         </receiver>
     </application>

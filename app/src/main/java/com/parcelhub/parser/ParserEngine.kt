@@ -47,7 +47,26 @@ class ParserEngine(private val rules: CompiledRules) {
         }
 
         // ---- 第二层：通用字段提取 ----
-        val tracking = trackingExtractor.extract(body, sourceParser.carrierHint(body))
+        // §29/§30 文本标准化兜底 + §7/§8 列表批量多单号（SOP V2.0）。
+        // 单号路径：extract（原语义不动）→ extractAll 补漏 → 紧凑拼接再兜一次；
+        // 多单号：extractAll 拿全量，>1 单时逐单成事件（归属不明的字段不摊派）。
+        val carrierHint = sourceParser.carrierHint(body)
+        var primary = trackingExtractor.extract(body, carrierHint)
+        if (primary.trackingNumber == null) {
+            primary = trackingExtractor.extractAll(body, carrierHint).firstOrNull() ?: primary
+        }
+        if (primary.trackingNumber == null) {
+            // 无障碍节点文本按行拼接，单号被节点边界拆成两半（SF123 / 456…）时
+            // 原文读不到：压缩空白后再提一次。只认带字母或带标签的候选，
+            // 防止座机号、订单号等相邻数字被粘成假单号。
+            val compact = COMPACT_WS.replace(body, "")
+            if (compact.length < body.length && compact.length <= MAX_COMPACT_LENGTH) {
+                primary = trackingExtractor
+                    .extractAll(compact, carrierHint, allowBareNumeric = false)
+                    .firstOrNull() ?: primary
+            }
+        }
+        val tracking = primary
         val pickup = pickupExtractor.extract(body, tracking.trackingNumber)
         val status = statusExtractor.extract(body)
         val locationFull = addressExtractor.extractLocationRaw(body)
@@ -96,26 +115,51 @@ class ParserEngine(private val rules: CompiledRules) {
             else -> "信号较弱，标记待确认"
         }
 
-        val event = ParcelEvent(
+        val orderKey = sourceParser.orderKey(body)
+        val fingerprint = sourceParser.fingerprint(raw.title, body)
+        val rawSummary = PrivacyUtil.summarize(body)
+
+        fun buildEvent(t: TrackingExtractor.Result, attachContext: Boolean) = ParcelEvent(
             sourceType = SourceType.from(sourceRule?.sourceType ?: sourceParser.sourceType.name),
             sourcePackage = raw.sourcePackage,
             notificationKey = raw.notificationKey,
             eventType = eventType,
             status = shipmentStatus,
-            trackingNumber = tracking.trackingNumber,
-            carrier = tracking.carrier,
-            pickupCode = pickup.code,
-            pickupLocation = location,
-            destination = destination,
-            orderKey = sourceParser.orderKey(body),
-            fingerprint = sourceParser.fingerprint(raw.title, body),
-            rawSummary = PrivacyUtil.summarize(body),
+            trackingNumber = t.trackingNumber,
+            carrier = t.carrier,
+            // §7/§8 批量：订单号 / 取件码 / 地址只在单号唯一时归属；
+            // 多单混排页归属不明，宁可不摊派（SOP §6.4 不得猜测），
+            // 字段随后续详情页读取按身份键去重补写。
+            pickupCode = if (attachContext) pickup.code else null,
+            pickupLocation = if (attachContext) location else null,
+            destination = if (attachContext) destination else null,
+            orderKey = if (attachContext) orderKey else null,
+            fingerprint = fingerprint,
+            rawSummary = rawSummary,
             confidence = confidence,
             eventTime = raw.receivedAt,
             createdAt = System.currentTimeMillis(),
+            channel = raw.channel,
         )
 
-        return ParseResult(event = event, confidence = confidence, reason = reason)
+        // §7/§8 列表批量：一页多个单号 → 一单一事件；单号唯一时保留完整上下文归属
+        val numbered = if (tracking.trackingNumber != null) {
+            trackingExtractor.extractAll(body, carrierHint).filter { it.trackingNumber != null }
+        } else {
+            emptyList()
+        }
+        val events = if (numbered.size > 1) {
+            numbered.map { t -> buildEvent(t, attachContext = false) }
+        } else {
+            listOf(buildEvent(tracking, attachContext = true))
+        }
+
+        return ParseResult(
+            event = events.first(),
+            confidence = confidence,
+            reason = reason,
+            events = events,
+        )
     }
 
     /** 未知来源的通用门禁：强关键词直接放行，弱关键词需累计 2 个以上 */
@@ -146,5 +190,11 @@ class ParserEngine(private val rules: CompiledRules) {
         val STRONG_GATE = listOf(
             "取件码", "取货码", "运单号", "快递单号", "已到驿站", "已入柜", "请取件", "取件通知",
         )
+
+        /** §29/§30：紧凑拼接兜底用的空白压缩（节点按行拼接会把单号截断） */
+        val COMPACT_WS = Regex("""\s+""")
+
+        /** 紧凑文本长度上限（防超长文本二次解析的无谓开销）；有空白被压缩才跑 */
+        const val MAX_COMPACT_LENGTH = 8_000
     }
 }

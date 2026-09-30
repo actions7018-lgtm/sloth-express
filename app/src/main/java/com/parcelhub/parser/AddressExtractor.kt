@@ -105,6 +105,11 @@ class AddressExtractor(private val rules: CompiledRules) {
         for (blocked in rules.locationBlacklist) {
             if (name.contains(blocked)) return false
         }
+        // 承运商品牌不是地点：拼多多路线卡「预计 5 小时内到达 圆通快递 : YT07…」
+        // 会被地点规则 2（“到达 + 2~16 汉字”）截成品牌名（SOP §6.4 不得猜测）
+        for (carrier in rules.rules.carriers) {
+            if (name == carrier.name || carrier.aliases.any { name.contains(it) }) return false
+        }
         // 纯地点后缀（如“驿站”“快递柜”）不构成有效站点名
         if (name in STATION_ONLY) return false
         // 必须包含中文

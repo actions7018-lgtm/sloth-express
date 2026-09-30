@@ -54,12 +54,15 @@ internal fun BroadcastReceiver.dispatchSms(context: Context, envelopes: List<Sms
         try {
             val enabled = runCatching { graph.isSmsSourceEnabled() }.getOrDefault(true)
             val outcome = graph.smsIngestor.ingest(envelopes, enabled)
+            // 健康检测（检测 SOP §5）：只记时间戳，不记内容/发件人
+            graph.health.onSmsEvent(parsed = outcome.enqueued > 0)
             // 隐私（SOP §39）：只记开关、计数与脱敏原因，绝不输出正文 / 发件人
             AppLog.d(
                 "sms ingest: enabled=$enabled enqueued=${outcome.enqueued} " +
                     "skipped=${outcome.skipped} reason=${outcome.reason}",
             )
         } catch (t: Throwable) {
+            graph.health.onSmsFailure()
             AppLog.w("sms ingest failed", t)
         } finally {
             pending.finish()

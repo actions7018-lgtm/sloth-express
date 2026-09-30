@@ -14,21 +14,31 @@ import androidx.core.app.NotificationManagerCompat
 import com.parcelhub.data.db.AppDatabase
 import com.parcelhub.data.entity.RuleEntity
 import com.parcelhub.data.repository.ShipmentRepository
+import com.parcelhub.health.BackgroundHealth
+import com.parcelhub.health.HealthCollector
 import com.parcelhub.model.RawNotification
 import com.parcelhub.autoquery.AutoQueryTaskManager
 import com.parcelhub.autoquery.cainiao.CainiaoAutomationSession
 import com.parcelhub.autoquery.cainiao.CainiaoLaunchGate
 import com.parcelhub.ingest.HealthState
 import com.parcelhub.ingest.IngestPipeline
+import com.parcelhub.ingest.RecognitionMetrics
 import com.parcelhub.ingest.SourceSettings
 import com.parcelhub.island.IslandDedup
 import com.parcelhub.island.IslandEventDispatcher
 import com.parcelhub.island.IslandManager
 import com.parcelhub.island.IslandNotificationManager
 import com.parcelhub.island.SharedPreferencesSeenStore
+import com.parcelhub.mock.MockDataSeeder
 import com.parcelhub.notification.AppNotificationManager
 import com.parcelhub.parser.ParserEngine
 import com.parcelhub.parser.RuleManager
+import com.parcelhub.ocr.OcrController
+import com.parcelhub.ocr.ScreenCaptureService
+import com.parcelhub.pending.PendingFocus
+import com.parcelhub.pending.PendingSourceInfo
+import com.parcelhub.pending.PendingSourceResolver
+import com.parcelhub.pending.PendingWatch
 import com.parcelhub.sms.SmsContract
 import com.parcelhub.sms.SmsIngestor
 import com.parcelhub.sms.SharedPreferencesSmsSeenStore
@@ -37,8 +47,10 @@ import com.parcelhub.widget.TodoWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 手工依赖容器：一个 App 只有一个实例。
@@ -54,6 +66,9 @@ class ServiceLocator(context: Context) {
     /** 应用级协程作用域：只用于装配与低频后台任务，不用于常驻轮询 */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /** 待补全补偿循环的唤醒信号（SOP §23）：新建待补全订单 / 启动时对账用，合并突发 */
+    private val pendingWake = Channel<Unit>(Channel.CONFLATED)
+
     private val settingsPrefs by lazy {
         appContext.getSharedPreferences(KEY_SETTINGS, Context.MODE_PRIVATE)
     }
@@ -66,9 +81,37 @@ class ServiceLocator(context: Context) {
 
     val database: AppDatabase by lazy { AppDatabase.get(appContext) }
 
-    val repository: ShipmentRepository by lazy { ShipmentRepository(database) }
+    val repository: ShipmentRepository by lazy {
+        ShipmentRepository(database, sourceInfoOf = ::resolvePendingSource)
+    }
+
+    /**
+     * 待补全来源识别（需求 §三）：规则类型来自 rules.json（ECOMMERCE 判定），
+     * 应用名优先取系统 PackageManager 标签（applicationLabel），规则 appName 兜底。
+     * 每次只在「新建 / 补全待补全」时调用，不在通知监听回调里跑（SOP §7.1）。
+     */
+    private fun resolvePendingSource(
+        pkg: String,
+        channel: String?,
+    ): PendingSourceInfo {
+        val rule = runCatching { ruleManager.rules().sourceFor(pkg) }.getOrNull()
+        val label = runCatching {
+            val pm = appContext.packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+        }.getOrNull()
+        return PendingSourceResolver.resolve(
+            sourcePackage = pkg,
+            channel = channel,
+            ruleType = rule?.sourceType,
+            ruleAppName = rule?.appName,
+            appLabel = label,
+        )
+    }
 
     val health: HealthState by lazy { HealthState() }
+
+    /** 识别运行指标（SOP V2.0 §35）：页面读取 / 取号成功时间戳 + OCR 计数，落 prefs */
+    val recognitionMetrics: RecognitionMetrics by lazy { RecognitionMetrics(appContext) }
 
     private val rulesJson: String by lazy {
         appContext.assets.open(RULES_ASSET).bufferedReader().use { it.readText() }
@@ -120,6 +163,33 @@ class ServiceLocator(context: Context) {
             settingsPrefs.edit().putBoolean(KEY_AUTO_QUERY_ENABLED, value).apply()
         }
 
+    /**
+     * 待补全自动读页开关（设置页「自动识别订单页」），默认开。
+     * 关掉后只剩手动通路（详情页「去查看」/ 设置页手动按钮的 10 分钟焦点）；
+     * setter 同步 [PendingWatch]（无障碍服务事件回调读同一进程的纯内存状态）。
+     */
+    var autoReadEnabled: Boolean
+        get() = settingsPrefs.getBoolean(KEY_AUTO_READ_ENABLED, true)
+        set(value) {
+            settingsPrefs.edit().putBoolean(KEY_AUTO_READ_ENABLED, value).apply()
+            PendingWatch.setAuto(value)
+        }
+
+    /**
+     * OCR 截图兜底开关（设置页「OCR 截图兜底」），**默认关**：
+     * 开启在 API 29 需经 [com.parcelhub.ocr.OcrConsentActivity] 系统授权后
+     * 由其写入 true（API 30+ 无弹窗，设置页直接写入）。
+     * 关闭时同步停掉 MediaProjection 会话（若在运行）。
+     */
+    var ocrFallbackEnabled: Boolean
+        get() = settingsPrefs.getBoolean(KEY_OCR_FALLBACK_ENABLED, false)
+        set(value) {
+            settingsPrefs.edit().putBoolean(KEY_OCR_FALLBACK_ENABLED, value).apply()
+            if (!value) {
+                runCatching { ScreenCaptureService.stop(appContext) }
+            }
+        }
+
     /** 同单号 30 秒去重门禁（SOP §10.1），与任务表一起构成“唯一有效任务”约束 */
     val autoQueryGate: CainiaoLaunchGate by lazy { CainiaoLaunchGate() }
 
@@ -164,6 +234,23 @@ class ServiceLocator(context: Context) {
             scope = appScope,
             autoQuery = autoQueryTaskManager,
             island = island,
+            metrics = recognitionMetrics,
+        )
+    }
+
+    /**
+     * OCR 截图兜底编排（SOP V2.0 §19）：判定条件在无障碍读页后触发，
+     * 结果进同一 pipeline（channel=SCREEN_OCR，身份闸 / 身份键去重同口径）。
+     * 待补全查询走 [repository]，手动焦点复用 [PendingFocus]（10 分钟 TTL）。
+     */
+    val ocrController: OcrController by lazy {
+        OcrController(
+            metrics = recognitionMetrics,
+            hasPendingFor = { pkg -> repository.hasPendingWaitingFor(pkg) },
+            isManualFocus = { pkg -> PendingFocus.matches(pkg, System.currentTimeMillis()) },
+            enqueue = { raw -> pipeline.enqueue(raw) },
+            isEnabled = { ocrFallbackEnabled },
+            scope = appScope,
         )
     }
 
@@ -195,6 +282,42 @@ class ServiceLocator(context: Context) {
         notifier.ensureChannels()
         island.ensureChannels()
 
+        // 待补全订单延迟补偿（SOP §23/§24/§25）：
+        // 单个挂起协程睡到最近的检查点（24h/48h/72h），没有 WAITING_TRACKING 就一直等唤醒信号，
+        // 不轮询、不建常驻服务；进程被杀后下次启动会重新对账（SOP §39 不丢待补全订单）。
+        repository.onPendingCreated = { pendingWake.trySend(Unit) }
+        appScope.launch {
+            // Debug Mock 数据（MockDataSeeder §10）：仅 Debug 注入，Release 直接返回；
+            // 必须排在对账循环**之前**——场景 E（>72h 无单号）首帧对账就要转 EXPIRED，
+            // 冒烟脚本用 Settings.Global(parcelhub_mock_seed=0) 抑制，保绝对计数断言不变。
+            runCatching { MockDataSeeder.seedIfNeeded(appContext) }
+                .onFailure { AppLog.w("mock seed failed", it) }
+            while (true) {
+                val next = try {
+                    repository.reconcilePending(System.currentTimeMillis())
+                        .also { BackgroundHealth.recordSuccess(System.currentTimeMillis()) }
+                } catch (t: Throwable) {
+                    // 健康检测（检测 §7.4）：连续 3 次失败 → ERROR，失败要留证据
+                    BackgroundHealth.recordFailure(System.currentTimeMillis())
+                    AppLog.w("pending reconcile failed", t)
+                    null
+                }
+                if (next == null) {
+                    // 没有待补全订单：不安排任何补偿任务，只等新订单叫醒（SOP §25）
+                    pendingWake.receive()
+                } else {
+                    val wait = (next - System.currentTimeMillis()).coerceAtLeast(MIN_RECONCILE_WAIT_MS)
+                    withTimeoutOrNull(wait) { pendingWake.receive() }
+                }
+            }
+        }
+
+        // 自动检测（检测 §十八）：App 启动立即检测一次并缓存；设置页/回前台会再刷新
+        appScope.launch {
+            runCatching { HealthCollector.refresh(appContext) }
+                .onFailure { AppLog.w("health refresh failed", it) }
+        }
+
         // 首次启动：来源种子数据 + 规则版本落库（一次性，不轮询）
         appScope.launch {
             withContext(Dispatchers.IO) {
@@ -225,6 +348,30 @@ class ServiceLocator(context: Context) {
                 }
             }.onFailure { AppLog.w("widget observe failed", it) }
         }
+
+        // 待补全自动监控（需求「待补全改全自动」+ 设置页自动开关）：只订阅数据流，
+        // 有待补全单的来源包名 +（开关开时）启用中的来源 App 进 PendingWatch 候选集；
+        // 补全 / 过期 / 删除自动移出，来源管理关掉即移出。无障碍服务事件回调同步查集合，
+        // 不轮询、不做常驻扫描——零 IO。开关本体走 settingsPrefs（见 autoReadEnabled）。
+        PendingWatch.setAuto(autoReadEnabled)
+        appScope.launch {
+            runCatching {
+                repository.observePending().collect { rows ->
+                    PendingWatch.update(
+                        rows.mapNotNull { it.sourcePackageName }.toSet(),
+                    )
+                }
+            }.onFailure { AppLog.w("pending watch observe failed", it) }
+        }
+        appScope.launch {
+            runCatching {
+                repository.observeSources().collect { rows ->
+                    PendingWatch.updateEnabled(
+                        rows.filter { it.enabled }.map { it.packageName }.toSet(),
+                    )
+                }
+            }.onFailure { AppLog.w("pending watch sources failed", it) }
+        }
     }
 
     /**
@@ -254,7 +401,14 @@ class ServiceLocator(context: Context) {
         const val KEY_SETTINGS = "parcelhub_settings"
         const val KEY_GENERIC_SOURCE = "generic_source_enabled"
         const val KEY_AUTO_QUERY_ENABLED = "auto_query_enabled"
+
+        /** 设置页「自动识别订单页」开关（待补全自动读页），默认 true */
+        const val KEY_AUTO_READ_ENABLED = "auto_read_enabled"
+        const val KEY_OCR_FALLBACK_ENABLED = "ocr_fallback_enabled"
         const val KEY_ONBOARDING_DONE = "onboarding_done"
+
+        /** 补偿循环最小睡醒间隔，防止时钟异常导致空转（SOP §40 低功耗） */
+        const val MIN_RECONCILE_WAIT_MS = 60_000L
 
         /** 分享导入的伪来源包名（注册在 GenericParser 路径上） */
         const val SHARE_SOURCE = "com.parcelhub.share"

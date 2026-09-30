@@ -162,6 +162,30 @@ object PermissionUtil {
             }
     }
 
+    /**
+     * 本 App 是否已被加入电池优化白名单（后台运行健康检测用，检测 SOP §7）。
+     * true=已放行后台；false=受系统电池限制；null=系统读不到（此时检测只能判 UNKNOWN，§7.6）。
+     */
+    fun isIgnoringBatteryOptimizations(context: Context): Boolean? {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            ?: return null
+        return runCatching { pm.isIgnoringBatteryOptimizations(context.packageName) }.getOrNull()
+    }
+
+    /** 跳电池优化白名单页（健康检测异常详情 [去设置]，检测 SOP §17） */
+    fun openBatteryOptimizationSettings(context: Context) {
+        val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { context.startActivity(intent) }
+            .onFailure {
+                runCatching {
+                    context.startActivity(
+                        Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+            }
+    }
+
     private const val ENABLED_NOTIFICATION_LISTENERS = "enabled_notification_listeners"
     private const val ENABLED_ACCESSIBILITY_SERVICES = "enabled_accessibility_services"
 

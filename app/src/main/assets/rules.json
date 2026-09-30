@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "gateKeywords": [
     "快递", "包裹", "物流", "运单", "单号", "取件", "取货", "驿站",
     "代收", "丰巢", "菜鸟", "派送", "发货", "签收", "到站", "入柜", "柜"
@@ -30,7 +30,7 @@
     { "code": "ZTO", "name": "中通快递", "aliases": ["中通", "中通快递"], "trackingPatterns": ["\\b[67]\\d{11,12}\\b"] },
     { "code": "YTO", "name": "圆通速递", "aliases": ["圆通", "圆通速递"], "trackingPatterns": ["\\bYT\\d{10,13}\\b", "\\b[16]\\d{12}\\b"] },
     { "code": "YD", "name": "韵达速递", "aliases": ["韵达", "韵达速递"], "trackingPatterns": ["\\b[34]\\d{12}\\b"] },
-    { "code": "STO", "name": "申通快递", "aliases": ["申通", "申通快递"], "trackingPatterns": ["\\b[78]\\d{11,13}\\b"] },
+    { "code": "STO", "name": "申通快递", "aliases": ["申通", "申通快递"], "trackingPatterns": ["\\b[78]\\d{11,14}\\b"] },
     { "code": "JT", "name": "极兔速递", "aliases": ["极兔", "极兔速递", "J&T"], "trackingPatterns": ["\\b9\\d{12,14}\\b"] },
     { "code": "EMS", "name": "EMS", "aliases": ["EMS", "中国邮政", "邮政快递", "邮政"], "trackingPatterns": ["\\b[A-Z]{2}\\d{9}[A-Z]{2}\\b", "\\b[12]\\d{12}\\b"] },
     { "code": "ANE", "name": "安能物流", "aliases": ["安能", "安能物流"], "trackingPatterns": ["\\b\\d{12}\\b"] },

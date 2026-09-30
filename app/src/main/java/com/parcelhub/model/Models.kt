@@ -95,6 +95,12 @@ data class RawNotification(
     val subText: String?,
     val receivedAt: Long,
     val isOngoing: Boolean,
+    /**
+     * 采集通道（[com.parcelhub.pending.PendingSourceType.name]，如 ACCESSIBILITY）。
+     * null = 按来源包名推断（通知监听 → NOTIFICATION、`com.parcelhub.sms` → SMS …），
+     * 只有「包名无法表达的通道」才需要显式携带（需求 §三-3 无障碍读取）。
+     */
+    val channel: String? = null,
 ) {
     /** 标题与正文的轻量拼接结果，解析层唯一读取的文本入口。 */
     val body: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
@@ -132,16 +138,24 @@ data class ParcelEvent(
     val confidence: Double = 0.0,
     val eventTime: Long = 0L,
     val createdAt: Long = 0L,
+    /** 采集通道（同 [RawNotification.channel]）：解析时原样透传给待补全来源识别 */
+    val channel: String? = null,
 ) {
     /** 合并/去重使用的稳定键：来源 + 通知 key */
     val dedupKey: String get() = "$sourcePackage|$notificationKey"
 }
 
-/** 解析结果：事件 + 置信度 + 失败原因（用于诊断页脱敏样本，SOP §19.1） */
+/**
+ * 解析结果：事件 + 置信度 + 失败原因（用于诊断页脱敏样本，SOP §19.1）。
+ *
+ * [events]（SOP V2.0 §7/§8 列表批量）：一页识别出多个订单的单号时逐单成事件；
+ * 单事件场景恒为 `[event]`，旧调用方只看 [event] 不受影响。
+ */
 data class ParseResult(
     val event: ParcelEvent?,
     val confidence: Double = 0.0,
     val reason: String? = null,
+    val events: List<ParcelEvent> = listOfNotNull(event),
 )
 
 /** 包裹实体（SOP §4.3，产品核心实体） */

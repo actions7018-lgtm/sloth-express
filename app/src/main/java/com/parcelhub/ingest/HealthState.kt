@@ -24,6 +24,18 @@ data class HealthSnapshot(
     val totalParsed: Long = 0L,
     val totalSkipped: Long = 0L,
     val totalDropped: Long = 0L,
+    /** 最近一次监听服务连接成功时间（检测 §4.2 / §4.3 断开时长判定） */
+    val lastConnectedAt: Long = 0L,
+    /** 最近一次监听服务断开时间；从未断开为 0 */
+    val lastDisconnectedAt: Long = 0L,
+    /** 连续监听/解析失败次数：解析成功清零（检测 §4.3/§4.4） */
+    val consecutiveErrors: Int = 0,
+    /** 最近一次收到短信（任意短信，检测 §5 证据） */
+    val lastSmsEventAt: Long = 0L,
+    /** 最近一次物流短信入库成功 */
+    val lastSmsParsedAt: Long = 0L,
+    /** 连续短信处理失败次数（异常，不含正常过滤；检测 §5.3/§5.4） */
+    val consecutiveSmsFailures: Int = 0,
 ) {
     /** 是否长期收不到事件（用于“可能受到后台限制”提示，不主动骚扰用户） */
     fun isStalled(now: Long, thresholdMs: Long = 30 * 60_000L): Boolean =
@@ -39,7 +51,12 @@ class HealthState(private val clock: () -> Long = System::currentTimeMillis) {
     val snapshot: StateFlow<HealthSnapshot> = _snapshot.asStateFlow()
 
     fun onListenerChanged(bound: Boolean) {
-        _snapshot.value = _snapshot.value.copy(listenerBound = bound)
+        val now = clock()
+        _snapshot.value = _snapshot.value.copy(
+            listenerBound = bound,
+            lastConnectedAt = if (bound) now else _snapshot.value.lastConnectedAt,
+            lastDisconnectedAt = if (bound) _snapshot.value.lastDisconnectedAt else now,
+        )
     }
 
     fun onNotificationAccess(enabled: Boolean) {
@@ -60,6 +77,7 @@ class HealthState(private val clock: () -> Long = System::currentTimeMillis) {
         _snapshot.value = current.copy(
             lastParsedAt = now,
             totalParsed = current.totalParsed + 1,
+            consecutiveErrors = 0,
         )
     }
 
@@ -72,11 +90,31 @@ class HealthState(private val clock: () -> Long = System::currentTimeMillis) {
     }
 
     fun onError() {
-        _snapshot.value = _snapshot.value.copy(lastErrorAt = clock())
+        val current = _snapshot.value
+        _snapshot.value = current.copy(
+            lastErrorAt = clock(),
+            consecutiveErrors = current.consecutiveErrors + 1,
+        )
     }
 
     fun onDropped() {
         val current = _snapshot.value
         _snapshot.value = current.copy(totalDropped = current.totalDropped + 1)
+    }
+
+    /** 收到一条短信（任意内容）；[parsed] 为 true 表示其中的物流短信成功入库（连续失败随之清零） */
+    fun onSmsEvent(parsed: Boolean) {
+        val now = clock()
+        _snapshot.value = _snapshot.value.copy(
+            lastSmsEventAt = now,
+            lastSmsParsedAt = if (parsed) now else _snapshot.value.lastSmsParsedAt,
+            consecutiveSmsFailures = if (parsed) 0 else _snapshot.value.consecutiveSmsFailures,
+        )
+    }
+
+    /** 短信处理抛异常（检测 §5.4 连续 3 次 → ERROR） */
+    fun onSmsFailure() {
+        val current = _snapshot.value
+        _snapshot.value = current.copy(consecutiveSmsFailures = current.consecutiveSmsFailures + 1)
     }
 }

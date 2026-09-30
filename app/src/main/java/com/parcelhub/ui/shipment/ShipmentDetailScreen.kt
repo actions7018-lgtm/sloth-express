@@ -201,7 +201,7 @@ fun ShipmentDetailScreen(shipmentId: Long, onBack: () -> Unit) {
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.height(4.dp))
-                DetailRow("运单号", item.trackingNumber ?: "未知")
+                DetailRow("快递单号", item.trackingNumber ?: "未知")
                 DetailRow("快递公司", item.carrier ?: "未知")
                 DetailRow("来源平台", item.sourcePlatform ?: "未知")
                 DetailRow("平台状态", statusLabel(item.statusEnum))

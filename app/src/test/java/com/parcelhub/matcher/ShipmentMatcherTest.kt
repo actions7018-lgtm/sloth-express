@@ -11,6 +11,8 @@ package com.parcelhub.matcher
 
 import com.parcelhub.data.entity.ParcelEventEntity
 import com.parcelhub.data.entity.ShipmentEntity
+import com.parcelhub.model.ParcelEvent
+import com.parcelhub.model.ShipmentStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -197,6 +199,110 @@ class ShipmentMatcherTest {
         assertEquals("11-22-3344", kept.first)
         assertEquals("东门驿站", kept.second)
         assertEquals("A12", kept.third)
+    }
+
+    // ---------- 订单号区分（拼多多多单混排页面，防 3 单并 1 单） ----------
+
+    @Test
+    fun match_by_context_skips_when_both_order_keys_differ() {
+        val now = System.currentTimeMillis()
+
+        // 指纹（页面公共框架）雷同、时间窗也命中，但平台订单号不同 → 不同订单，绝不归并
+        val otherOrder = event(
+            shipmentId = 71L,
+            eventTime = now,
+            orderKey = "260928-434215381420088",
+            fingerprint = "我的订单",
+        )
+        val incoming = event(
+            shipmentId = 0L,
+            eventTime = now + 60_000L,
+            orderKey = "260928-485239099820088",
+            fingerprint = "我的订单",
+        )
+        assertNull(ShipmentMatcher.matchByContext(incoming, listOf(otherOrder)))
+
+        // 订单号一致 → 照常按指纹归并
+        val sameOrder = otherOrder.copy(orderKey = "260928-485239099820088")
+        assertEquals(71L, ShipmentMatcher.matchByContext(incoming, listOf(sameOrder)))
+
+        // 一侧没有订单号 → 保留兜底能力（无订单号的通知仍可按指纹/地点归并）
+        val noKey = otherOrder.copy(orderKey = null)
+        assertEquals(71L, ShipmentMatcher.matchByContext(incoming.copy(orderKey = null), listOf(noKey)))
+    }
+
+    // ---------- 行级单号守卫（二级/三级命中后复核） ----------
+
+    @Test
+    fun tracking_row_guard_blocks_conflicting_rows() {
+        // 两侧都有单号且不同 → 拒绝（别单的行）
+        assertFalse(ShipmentMatcher.trackingRowUsable("777449133381845", "YT0710902997641"))
+        // 任一侧没有单号 → 放行（无号行可被后到的单号补全）
+        assertTrue(ShipmentMatcher.trackingRowUsable("YT0710902997641", null))
+        assertTrue(ShipmentMatcher.trackingRowUsable(null, "YT0710902997641"))
+        // 单号一致（归一化后）→ 放行
+        assertTrue(ShipmentMatcher.trackingRowUsable("yt0710902997641", "YT0710902997641"))
+    }
+
+    // ---------- 无障碍无身份文本闸（订单列表页不建垃圾行） ----------
+
+    @Test
+    fun identityless_a11y_text_is_dropped() {
+        // 列表页：无单号 + 无订单号 → 丢弃
+        assertTrue(ShipmentMatcher.isIdentitylessA11yEvent("ACCESSIBILITY", null, null))
+        assertTrue(ShipmentMatcher.isIdentitylessA11yEvent("ACCESSIBILITY", "  ", " "))
+        // 有单号或有订单号（详情页）→ 放行
+        assertFalse(ShipmentMatcher.isIdentitylessA11yEvent("ACCESSIBILITY", "YT0710902997641", null))
+        assertFalse(
+            ShipmentMatcher.isIdentitylessA11yEvent("ACCESSIBILITY", null, "260928-485239099820088"),
+        )
+        // 短信 / 通知的「已发货无单号」待补全流程不受影响
+        assertFalse(ShipmentMatcher.isIdentitylessA11yEvent("SMS", null, null))
+        assertFalse(ShipmentMatcher.isIdentitylessA11yEvent(null, null, null))
+    }
+
+    // ---------- OCR 截图文本与无障碍同口径（SOP V2.0 §19） ----------
+
+    @Test
+    fun identityless_ocr_text_is_dropped_like_a11y() {
+        assertTrue(ShipmentMatcher.isIdentitylessA11yEvent("SCREEN_OCR", null, null))
+        assertFalse(ShipmentMatcher.isIdentitylessA11yEvent("SCREEN_OCR", "YT0710904037400", null))
+        // 页面通道口径：身份键去重只对「读页面」通道生效
+        assertTrue(ShipmentMatcher.isPageChannel("ACCESSIBILITY"))
+        assertTrue(ShipmentMatcher.isPageChannel("SCREEN_OCR"))
+        assertFalse(ShipmentMatcher.isPageChannel("SMS"))
+        assertFalse(ShipmentMatcher.isPageChannel("NOTIFICATION"))
+        assertFalse(ShipmentMatcher.isPageChannel(null))
+    }
+
+    // ---------- 去重命中的字段补写（页面渐进加载：后到的单号/地址） ----------
+
+    @Test
+    fun refill_on_dedup_hit_completes_empty_fields_without_touching_status() {
+        val arrived = ParcelEvent(
+            sourcePackage = "com.xunmeng.pinduoduo",
+            notificationKey = "a11y|pdd|0",
+            status = ShipmentStatus.ARRIVED,
+            trackingNumber = "yt0710902997641",
+            carrier = "圆通速递",
+            destination = "浙江省杭州市余杭区仓益绿苑56栋",
+            pickupCode = "11-22-3344",
+        )
+        val row = ShipmentEntity(id = 5L, status = ShipmentStatus.IN_TRANSIT.name)
+
+        val refilled = ShipmentMatcher.refillOnDedupHit(row, arrived, "YT0710902997641", 123L)
+        assertNotNull(refilled)
+        assertEquals("YT0710902997641", refilled?.trackingNumber)
+        assertEquals("圆通速递", refilled?.carrier)
+        assertEquals("浙江省杭州市余杭区仓益绿苑56栋", refilled?.address)
+        assertEquals("11-22-3344", refilled?.pickupCode)
+        // 状态不在此路径变更（状态推进仍走正常事件，提醒不丢）
+        assertEquals(ShipmentStatus.IN_TRANSIT.name, refilled?.status)
+        assertEquals(123L, refilled?.lastUpdatedAt)
+
+        // 已有值不覆盖 + 没有新空缺 → 不写库（返回 null）
+        val again = ShipmentMatcher.refillOnDedupHit(refilled!!, arrived, "777449133381845", 456L)
+        assertNull(again)
     }
 
     private fun event(

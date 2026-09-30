@@ -15,8 +15,8 @@ android {
         applicationId = "com.parcelhub"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 11
+        versionName = "0.1.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -58,6 +58,32 @@ android {
     }
 }
 
+// APK 输出命名：ParcelHub-<versionName>-<buildType>.apk（如 ParcelHub-0.1.0-release.apk）
+// AGP 9 移除了 defaultConfig.archivesName（gradle-api 9.4.1 已无该符号），
+// 改在 assemble 收尾时就地重命名，并同步 output-metadata.json 里的文件名。
+tasks.configureEach {
+    if (name == "assembleDebug" || name == "assembleRelease") {
+        doLast {
+            val buildType = name.removePrefix("assemble").lowercase()
+            val dir = layout.buildDirectory.dir("outputs/apk/$buildType").get().asFile
+            val metaFile = dir.resolve("output-metadata.json")
+            val meta = if (metaFile.exists()) metaFile.readText() else null
+            val version = meta?.let {
+                Regex("\"versionName\"\\s*:\\s*\"([^\"]+)\"").find(it)?.groupValues?.get(1)
+            } ?: "0.1.0"
+            dir.listFiles().orEmpty()
+                .filter { it.isFile && it.extension == "apk" && !it.name.startsWith("ParcelHub-") }
+                .forEach { apk ->
+                    val target = dir.resolve("ParcelHub-$version-$buildType.apk")
+                    if (apk.renameTo(target)) {
+                        if (meta != null) metaFile.writeText(meta.replace(apk.name, target.name))
+                        logger.lifecycle("APK renamed -> ${target.name}")
+                    }
+                }
+        }
+    }
+}
+
 dependencies {
     // ---- Compose ----
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
@@ -83,6 +109,9 @@ dependencies {
 
     // ---- 规则解析（rules.json → RuleSet，纯 JVM 可单测） ----
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+
+    // ---- OCR 兜底（SOP V2.0 §19）：端侧中文单号识别，bundled 模型不依赖 Google Play ----
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
 
     // ---- 协程（解析队列单消费者模型） ----
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")

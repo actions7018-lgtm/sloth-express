@@ -16,6 +16,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.parcelhub.data.entity.ParcelEventEntity
+import com.parcelhub.data.entity.PendingShipmentEntity
 import com.parcelhub.data.entity.QueryTaskEntity
 import com.parcelhub.data.entity.RuleEntity
 import com.parcelhub.data.entity.ShipmentEntity
@@ -60,6 +61,13 @@ interface ShipmentDao {
 
     @Query("DELETE FROM shipments WHERE id = :id")
     suspend fun delete(id: Long)
+
+    /**
+     * Mock 数据一键清空（MockDataSeeder）：只删 `source_platform LIKE 'MOCK%'` 的行。
+     * 真实来源是包名（com.*）或分享源，永远不会以 MOCK 开头，真数据零风险。
+     */
+    @Query("DELETE FROM shipments WHERE source_platform LIKE 'MOCK%'")
+    suspend fun deleteMock(): Int
 
     /**
      * 标记已取件：**只按主键 id 更新**，返回受影响行数（0 = 这行不存在 / 没更新成功）。
@@ -217,4 +225,70 @@ interface RuleDao {
 
     @Query("SELECT * FROM parser_rules WHERE rule_id = :ruleId")
     suspend fun findById(ruleId: String): RuleEntity?
+}
+
+/**
+ * 待补全订单 DAO（SOP §21 ShipmentPending）。
+ * 只存结构化字段，不存通知原文（SOP §42 隐私原则）。
+ */
+@Dao
+interface PendingShipmentDao {
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(pending: PendingShipmentEntity): Long
+
+    @Update
+    suspend fun update(pending: PendingShipmentEntity)
+
+    @Query("SELECT * FROM pending_shipments WHERE id = :id")
+    suspend fun findById(id: Long): PendingShipmentEntity?
+
+    /** 待补全详情页（需求 §五）：单条实时观察，补全成功后 UI 自动刷新 */
+    @Query("SELECT * FROM pending_shipments WHERE id = :id")
+    fun observeById(id: Long): Flow<PendingShipmentEntity?>
+
+    /** 全部 WAITING_TRACKING（SOP §25：没有它们就不安排补偿任务） */
+    @Query("SELECT * FROM pending_shipments WHERE status = :status ORDER BY shipped_at DESC")
+    suspend fun listByStatus(status: String): List<PendingShipmentEntity>
+
+    /** 首页「待补全」区（只观察等待中的） */
+    @Query(
+        "SELECT * FROM pending_shipments WHERE status = :status " +
+            "ORDER BY shipped_at DESC",
+    )
+    fun observeByStatus(status: String): Flow<List<PendingShipmentEntity>>
+
+    /** 同订单去重：已有绑定同一正式包裹的待补全记录就不再建（SOP 场景 6） */
+    @Query(
+        "SELECT * FROM pending_shipments " +
+            "WHERE shipment_id = :shipmentId AND status = :status LIMIT 1",
+    )
+    suspend fun findByShipment(shipmentId: Long, status: String): PendingShipmentEntity?
+
+    @Query("SELECT COUNT(*) FROM pending_shipments")
+    suspend fun count(): Int
+
+    /**
+     * Mock 数据一键清空（MockDataSeeder）：只删 `order_key LIKE 'MOCK%'` 的行。
+     * 真实待补全订单的 order_key 来自解析器（如「淘宝订单123…」），不会以 MOCK 开头。
+     */
+    @Query("DELETE FROM pending_shipments WHERE order_key LIKE 'MOCK%'")
+    suspend fun deleteMock(): Int
+
+    // ---- 健康检测证据（检测 SOP §8.1 检查项目，只读聚合，不做全表扫描） ----
+
+    /** 最早的计划检查时间（WAITING_TRACKING）；无任务为 null */
+    @Query("SELECT MIN(next_check_at) FROM pending_shipments WHERE status = :status")
+    suspend fun earliestNextCheckAt(status: String): Long?
+
+    /** 最早的到期时间（WAITING_TRACKING）；无任务为 null */
+    @Query("SELECT MIN(expire_at) FROM pending_shipments WHERE status = :status")
+    suspend fun earliestExpireAt(status: String): Long?
+
+    /** 数据矛盾条数（检测 §8.4：TRACKING_FOUND 却没有单号 = ERROR） */
+    @Query(
+        "SELECT COUNT(*) FROM pending_shipments " +
+            "WHERE status = :foundStatus AND tracking_number IS NULL",
+    )
+    suspend fun countInconsistent(foundStatus: String): Int
 }

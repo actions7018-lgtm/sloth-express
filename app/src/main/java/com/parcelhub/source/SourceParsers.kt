@@ -85,6 +85,11 @@ class JdParser : BaseSourceParser(
 class PddParser : BaseSourceParser(
     sourceType = SourceType.ECOMMERCE,
     orderPatterns = listOf(
+        // 真机实测（0.1.8，拼多多订单详情页）：编号是「前缀-长号」连字符格式
+        // 260928-434215381420088——旧的纯 \d 在连字符处断开（前缀 6 位 < 10 不达标），
+        // orderKey 恒空 → 详情页只剩裸「订单编号」词、入库被身份闸丢弃、
+        // 二级匹配（orderKey）整级失效。连字符格式优先，纯数字格式兜底。
+        Regex("订单(?:号|编号)\\s*[：:=为是]?\\s*(\\d{4,12}-\\d{6,24})"),
         Regex("订单(?:号|编号)\\s*[：:=为是]?\\s*(\\d{10,24})"),
     ),
 )

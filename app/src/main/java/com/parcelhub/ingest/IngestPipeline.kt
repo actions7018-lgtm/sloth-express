@@ -39,6 +39,7 @@ class IngestPipeline(
     scope: CoroutineScope,
     private val autoQuery: AutoQueryTaskManager? = null,
     private val island: IslandManager? = null,
+    private val metrics: RecognitionMetrics? = null,
 ) {
     private val queue: Channel<RawNotification> = Channel(
         capacity = QUEUE_CAPACITY,
@@ -92,41 +93,60 @@ class IngestPipeline(
             return
         }
 
-        val event = parseResult.event
-        if (event == null) {
+        val events = parseResult.events
+        if (events.isEmpty()) {
             health.onSkipped()
+            metrics?.onPageMiss(raw.channel)
             AppLog.d("skip ${raw.sourcePackage}: ${parseResult.reason}")
             return
         }
 
-        val outcome: IngestOutcome = try {
-            withContext(Dispatchers.IO) { repository.ingest(event) }
-        } catch (t: Throwable) {
-            AppLog.w("ingest failed: ${raw.sourcePackage}", t)
-            health.onError()
-            return
-        }
-
-        health.onParsed()
-
-        // 灵动岛（SOP §3 EventDispatcher / §11.1 默认通知模式）：
-        // 先交给灵动岛；它接管了（含“今天已经提醒过”）就不再发普通提醒，避免同一件事弹两条。
-        val islandHandled = try {
-            island?.onIngest(outcome) == true
-        } catch (t: Throwable) {
-            AppLog.w("island dispatch failed", t)
-            false
-        }
-        if (!islandHandled) notifier.onOutcome(outcome)
-
-        // 自动查询决策（EXPRESS_SMART_QUERY §8）：本地规则 + 落库，不发网络请求、不阻塞解析链
-        if (autoQuery != null) {
-            try {
-                autoQuery.onOutcome(outcome)
+        // §7/§8 列表批量：一页多单 → 逐单入库（每单一条时间线 / 一条提醒）；
+        // 单事件场景就是原来的单条路径，行为不变。
+        var anyTracking = false
+        for (event in events) {
+            val outcome: IngestOutcome = try {
+                withContext(Dispatchers.IO) { repository.ingest(event) }
             } catch (t: Throwable) {
-                AppLog.w("auto query decision failed", t)
+                AppLog.w("ingest failed: ${raw.sourcePackage}", t)
+                health.onError()
+                return
+            }
+
+            if (event.trackingNumber != null) anyTracking = true
+            health.onParsed()
+
+            // 灵动岛（SOP §3 EventDispatcher / §11.1 默认通知模式）：
+            // 先交给灵动岛；它接管了（含“今天已经提醒过”）就不再发普通提醒，避免同一件事弹两条。
+            val islandHandled = try {
+                island?.onIngest(outcome) == true
+            } catch (t: Throwable) {
+                AppLog.w("island dispatch failed", t)
+                false
+            }
+            if (!islandHandled) notifier.onOutcome(outcome)
+
+            // 自动查询决策（EXPRESS_SMART_QUERY §8）：本地规则 + 落库，不发网络请求、不阻塞解析链
+            if (autoQuery != null) {
+                try {
+                    autoQuery.onOutcome(outcome)
+                } catch (t: Throwable) {
+                    AppLog.w("auto query decision failed", t)
+                }
             }
         }
+
+        // SOP V2.0 §35/§36：识别指标（最近成功取号时间 / 连续未取号计数）
+        // + 阶段日志（脱敏：包名 / 通道 / 条数 / 置信度，不含正文与单号）。
+        if (anyTracking) {
+            metrics?.onTrackingFound()
+        } else {
+            metrics?.onPageMiss(raw.channel)
+        }
+        AppLog.d(
+            "ingest ${raw.sourcePackage} ch=${raw.channel} " +
+                "n=${events.size} trk=$anyTracking conf=${parseResult.confidence}",
+        )
     }
 
     private companion object {

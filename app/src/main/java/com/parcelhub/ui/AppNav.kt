@@ -34,14 +34,16 @@ import androidx.navigation.navArgument
 import com.parcelhub.ui.diagnostics.DiagnosticsScreen
 import com.parcelhub.ui.home.HomeScreen
 import com.parcelhub.ui.onboarding.OnboardingScreen
+import com.parcelhub.ui.pending.PendingShipmentDetailScreen
 import com.parcelhub.ui.settings.SettingsScreen
 import com.parcelhub.ui.shipment.ShipmentDetailScreen
 import com.parcelhub.ui.shipment.ShipmentListScreen
 import com.parcelhub.ui.source.SourceScreen
 
 /**
- * 页面结构（SOP §14）：
+ * 页面结构（SOP §14 + 需求 §五）：
  * P1 启动/权限引导 · P2 首页 · P3 快递列表 · P4 详情 · P5 设置 · P6 来源管理 · P7 诊断
+ * · P8 待补全详情（首页「待补全」卡片点击进入）
  *
  * 底部导航只有「首页 / 快递 / 设置」三项，
  * 不为“通知/事件/平台”创建独立底部导航。
@@ -54,8 +56,11 @@ object Routes {
     const val SOURCES = "sources"
     const val DIAGNOSTICS = "diagnostics"
     const val DETAIL = "detail/{shipmentId}"
+    const val PENDING_DETAIL = "pending/{pendingId}"
 
     fun detail(id: Long): String = "detail/$id"
+
+    fun pendingDetail(id: Long): String = "pending/$id"
 }
 
 private data class BottomTab(
@@ -123,6 +128,7 @@ fun AppNav(
                     onOpenSources = { navController.navigate(Routes.SOURCES) },
                     onOpenDiagnostics = { navController.navigate(Routes.DIAGNOSTICS) },
                     onOpenDetail = { navController.navigate(Routes.detail(it)) },
+                    onOpenPending = { navController.navigate(Routes.pendingDetail(it)) },
                 )
             }
             composable(Routes.LIST) {
@@ -149,6 +155,16 @@ fun AppNav(
             }
             composable(Routes.SOURCES) {
                 SourceScreen(onBack = { navController.popBackStack() })
+            }
+            composable(
+                route = Routes.PENDING_DETAIL,
+                arguments = listOf(navArgument("pendingId") { type = NavType.LongType }),
+            ) { entry ->
+                val id = entry.arguments?.getLong("pendingId") ?: return@composable
+                PendingShipmentDetailScreen(
+                    pendingId = id,
+                    onBack = { navController.popBackStack() },
+                )
             }
             composable(Routes.DIAGNOSTICS) {
                 DiagnosticsScreen(onBack = { navController.popBackStack() })

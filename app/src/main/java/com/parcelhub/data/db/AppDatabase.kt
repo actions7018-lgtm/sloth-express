@@ -16,6 +16,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.parcelhub.data.entity.ParcelEventEntity
+import com.parcelhub.data.entity.PendingShipmentEntity
 import com.parcelhub.data.entity.QueryTaskEntity
 import com.parcelhub.data.entity.RuleEntity
 import com.parcelhub.data.entity.ShipmentEntity
@@ -23,7 +24,8 @@ import com.parcelhub.data.entity.SourceAppEntity
 
 /**
  * Room 数据库（SOP §10）。
- * 保存 Shipment / ParcelEvent / source_apps / parser_rules / query_tasks，不保存无关通知。
+ * 保存 Shipment / ParcelEvent / source_apps / parser_rules / query_tasks /
+ * pending_shipments（SOP §21 待补全），不保存无关通知。
  */
 @Database(
     entities = [
@@ -32,8 +34,9 @@ import com.parcelhub.data.entity.SourceAppEntity
         SourceAppEntity::class,
         RuleEntity::class,
         QueryTaskEntity::class,
+        PendingShipmentEntity::class,
     ],
-    version = 3,
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -43,6 +46,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun sourceDao(): SourceDao
     abstract fun ruleDao(): RuleDao
     abstract fun queryTaskDao(): QueryTaskDao
+    abstract fun pendingShipmentDao(): PendingShipmentDao
 
     companion object {
         const val NAME = "parcelhub.db"
@@ -85,6 +89,50 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v3 → v4：新增待补全订单表（SOP §21 ShipmentPending），保留既有数据 */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `pending_shipments` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `order_key` TEXT,
+                        `platform` TEXT,
+                        `shipment_id` INTEGER,
+                        `shipped_at` INTEGER NOT NULL,
+                        `tracking_number` TEXT,
+                        `carrier` TEXT,
+                        `status` TEXT NOT NULL,
+                        `last_check_at` INTEGER,
+                        `next_check_at` INTEGER,
+                        `expire_at` INTEGER NOT NULL,
+                        `created_at` INTEGER NOT NULL,
+                        `updated_at` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_pending_shipments_status` " +
+                        "ON `pending_shipments` (`status`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_pending_shipments_shipped_at` " +
+                        "ON `pending_shipments` (`shipped_at`)",
+                )
+            }
+        }
+
+        /** v4 → v5：待补全订单加来源识别与商品/商家列（需求 §二/§五/§十），保留既有数据 */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `pending_shipments` ADD COLUMN `source_type` TEXT")
+                db.execSQL("ALTER TABLE `pending_shipments` ADD COLUMN `source_package_name` TEXT")
+                db.execSQL("ALTER TABLE `pending_shipments` ADD COLUMN `source_app_name` TEXT")
+                db.execSQL("ALTER TABLE `pending_shipments` ADD COLUMN `product_title` TEXT")
+                db.execSQL("ALTER TABLE `pending_shipments` ADD COLUMN `seller_name` TEXT")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -95,7 +143,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .fallbackToDestructiveMigrationOnDowngrade()
                 .build()
 

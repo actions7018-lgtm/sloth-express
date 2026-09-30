@@ -82,6 +82,70 @@ class TrackingExtractor(private val rules: CompiledRules) {
         return Result(null, carrier, 0.0, "没有找到运单号")
     }
 
+    /**
+     * 全部可识别单号（SOP V2.0 §7/§8 列表批量扫描）：
+     * 同一页出现多个订单的单号时逐个返回（按归一化单号去重，保序）。
+     *
+     * 与 [extract] 的差别：
+     *  - 逐级收集**全部**命中而不是首个（多单混排页一单一条）；
+     *  - 有承运商提示时也继续扫「带字母代号」形态（SF/YT… 跨公司单号，
+     *    字母前缀本身就是区分度，SOP V2.0 §9「不依赖关键词」）；
+     *  - [allowBareNumeric]=false 只用于 §29/§30 紧凑拼接兜底文本：
+     *    压缩空白会把相邻行数字粘在一起（座机 0769-33555666 等），
+     *    纯数字候选在此模式下不认，只认带字母代号或带标签命中的单号。
+     */
+    fun extractAll(
+        text: String,
+        carrierHint: String? = null,
+        allowBareNumeric: Boolean = true,
+    ): List<Result> {
+        if (text.isBlank()) return emptyList()
+
+        val aliasCarrier = detectCarrierByAlias(text)
+        val carrier = carrierHint ?: aliasCarrier
+        val out = LinkedHashMap<String, Result>()
+
+        fun put(value: String?, carrierName: String?, confidence: Double) {
+            if (value.isNullOrBlank()) return
+            val trimmed = value.trim()
+            if (isNoise(trimmed)) return
+            if (!allowBareNumeric && trimmed.none { it.isLetter() }) return
+            val key = trimmed.uppercase()
+            out.putIfAbsent(
+                key,
+                Result(trackingNumber = key, carrier = carrierName, confidence = confidence, reason = null),
+            )
+        }
+
+        // 1) 带标签的运单号：优先级最高
+        rules.labeledTracking?.findAll(text)?.forEach { m ->
+            val value = m.groupValues.getOrNull(1)
+            put(value, aliasCarrier ?: detectCarrierByShape(value.orEmpty()), 0.90)
+        }
+
+        // 2) 承运商关键词出现时，按该公司运单号形态匹配
+        val carrierRule = aliasCarrier?.let { name ->
+            rules.rules.carriers.firstOrNull { it.name == name }
+        }
+        if (carrierRule != null) {
+            for ((rule, regex) in rules.carrierPatterns) {
+                if (rule.code != carrierRule.code) continue
+                regex.findAll(text).forEach { m -> put(m.value, aliasCarrier, 0.80) }
+            }
+        }
+
+        // 3) 带字母公司代号的单号形态：多单混排时跨公司收集（必须带字母）
+        for ((rule, regex) in rules.distinctiveCarrierPatterns) {
+            regex.findAll(text).forEach { m ->
+                val value = m.value.trim()
+                if (value.none { it.isLetter() }) return@forEach
+                put(value, rule.name, 0.75)
+            }
+        }
+
+        return out.values.toList()
+    }
+
     /** 文本中出现的承运商别名 → 承运商名 */
     fun detectCarrierByAlias(text: String): String? {
         var best: String? = null

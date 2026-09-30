@@ -36,6 +36,17 @@ class AddressExtractorTest {
     }
 
     @Test
+    fun carrier_brand_is_not_a_location() {
+        // 拼多多路线卡「预计 5 小时内到达 圆通快递 : YT07…」——
+        // 地点规则 2（“到达 + 2~16 汉字”）会截到承运商品牌名，必须滤掉（SOP §6.4）
+        assertNull(extractor.extractLocation("已走 81%，预计 5 小时内到达 圆通快递"))
+        assertNull(extractor.extractLocation("您的快件已到达 申通快递 网点"))
+        assertNull(extractor.extractLocation("预计送达 中通快递"))
+        // 真实站点不受影响
+        assertEquals("南门驿站", extractor.extractLocation("取件地点：南门驿站"))
+    }
+
+    @Test
     fun missing_location_returns_null_not_guess() {
         assertNull(extractor.extractLocation("今天天气不错"))
         assertNull(extractor.extractLocation(""))
